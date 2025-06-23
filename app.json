@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "quisipp-delivery-partner",
+    "slug": "snack-0c55024b-e90e-4d50-bb29-c5fc086f8079",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app needs access to your location to show nearby delivery requests.",
+        "NSLocationAlwaysUsageDescription": "This app needs access to your location for tracking deliveries.",
+        "NSCameraUsageDescription": "This app needs access to your camera to take photos of deliveries.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to upload delivery proof.",
+        "NSUserNotificationUsageDescription": "This app needs to send you notifications about new delivery requests."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "NOTIFICATIONS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "description": "Quisipp Delivery Partner : Register as a delivery partner and start earning money by delivering packages and food",
+    "plugins": [
+      "expo-font",
+      "expo-location",
+      "expo-camera",
+      "expo-media-library",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#ffffff",
+          "defaultChannel": "default"
+        }
+      ]
+    ],
+    "permissions": [
+      "location",
+      "camera",
+      "mediaLibrary",
+      "notifications"
+    ]
+  }
+}
