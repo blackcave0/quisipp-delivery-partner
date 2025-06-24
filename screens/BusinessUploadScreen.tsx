@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   ScrollView,
   Text,
@@ -9,7 +9,9 @@ import {
   View,
   Dimensions,
   Platform,
-  KeyboardAvoidingView
+  KeyboardAvoidingView,
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Video, ResizeMode } from 'expo-av';
@@ -23,6 +25,9 @@ import {
   MaterialIcons,
   Feather
 } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { businessOwnerService, authService, mediaService } from '../services';
+import { useAuth } from '../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
 
@@ -40,14 +45,19 @@ const categoriesList = [
 type RootStackParamList = {
   Splash: undefined;
   ThankYou: undefined;
+  HomeScreen: undefined;
   // add other routes here if needed
 };
 
 export default function BusinessUploadScreen() {
   const navigation = useNavigation<import('@react-navigation/native').NavigationProp<RootStackParamList>>();
+  const { login, verifyOTP } = useAuth();
+  const [loading, setLoading] = useState(false);
 
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [businessName, setBusinessName] = useState('');
+  const [businessType, setBusinessType] = useState('');
   const [aadharUri, setAadharUri] = useState<string | null>(null);
   const [panUri, setPanUri] = useState<string | null>(null);
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
@@ -63,20 +73,132 @@ export default function BusinessUploadScreen() {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isOtpVerified, setIsOtpVerified] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
   const otpRefs = useRef<TextInput[]>([]);
 
+  // Load stored data if available
+  useEffect(() => {
+    const loadStoredData = async () => {
+      try {
+        const storedEmail = await AsyncStorage.getItem('user_email');
+        const storedPhone = await AsyncStorage.getItem('user_phone');
+
+        if (storedEmail) setEmail(storedEmail);
+        if (storedPhone) setPhone(storedPhone);
+      } catch (error) {
+        console.error('Error loading stored data:', error);
+      }
+    };
+
+    loadStoredData();
+  }, []);
+
+  // Check camera permissions
+  useEffect(() => {
+    (async () => {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      // Store permission status if needed
+    })();
+  }, []);
+
   const pickImage = async (setter: (uri: string | null) => void) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return toast.error('Permission denied');
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images' });
-    if (!result.canceled && result.assets && result.assets.length > 0) setter(result.assets[0].uri);
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        toast.error('Permission denied');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 1.0,
+        presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setter(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      toast.error('Failed to pick image');
+    }
   };
 
   const pickVideo = async (setter: (uri: string | null) => void) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return toast.error('Permission denied');
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'videos' });
-    if (!result.canceled && result.assets && result.assets.length > 0) setter(result.assets[0].uri);
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        toast.error('Permission denied');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: false,
+        quality: 1.0,
+        videoMaxDuration: 60,
+        presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setter(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking video:', error);
+      toast.error('Failed to pick video');
+    }
+  };
+
+
+  const takeSelfie = async () => {
+    try {
+      // Request camera permission
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        toast.error('Camera permission is required');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: 1,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        aspect: [1, 1],
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setSelfieUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error taking selfie:', error);
+      toast.error('Failed to take selfie');
+    }
+  };
+
+  const recordVideo = async (setter: (uri: string | null) => void) => {
+    try {
+      // Request camera permission
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        toast.error('Camera permission is required');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: 1,
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        videoMaxDuration: 30,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setter(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error recording video:', error);
+      toast.error('Failed to record video');
+    }
   };
 
   const toggleCategory = (catId: string) => {
@@ -106,7 +228,38 @@ export default function BusinessUploadScreen() {
     }
   };
 
-  const verifyOtp = async () => {
+  const sendOtp = async () => {
+    if (!phone) {
+      toast.error('Please enter your phone number');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Store phone and email for later use
+      await AsyncStorage.setItem('user_phone', phone);
+      if (email) await AsyncStorage.setItem('user_email', email);
+
+      // Send OTP request
+      const response = await login(phone);
+      if (response && typeof response === 'object' && 'success' in response && response.success) {
+        setOtpSent(true);
+        toast.success('OTP sent to your phone number');
+        // Focus first input
+        otpRefs.current[0]?.focus();
+      } else {
+        toast.error((response as any).message || 'Failed to send OTP');
+      }
+    } catch (error: any) {
+      console.error('Error sending OTP:', error);
+      toast.error(error.response?.data?.message || 'Failed to send OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyOtpCode = async () => {
     const otpString = otp.join('');
     if (otpString.length !== 6) {
       toast.error('Please enter complete OTP');
@@ -115,38 +268,144 @@ export default function BusinessUploadScreen() {
 
     setIsVerifying(true);
 
-    // Simulate OTP verification (replace with actual API call)
-    setTimeout(() => {
-      if (otpString === '123456') { // Demo OTP
+    try {
+      const response = await verifyOTP(phone, otpString);
+
+      if (response && typeof response === 'object' && 'success' in response && response.success) {
         setIsOtpVerified(true);
         toast.success('OTP verified successfully');
-        // Proceed to next step or submit
-        handleSubmit();
+
+        // Register business owner
+        await registerBusinessOwner();
       } else {
-        toast.error('Invalid OTP. Please try again.');
+        toast.error((response as any).message || 'Invalid OTP. Please try again.');
       }
+    } catch (error: any) {
+      console.error('OTP verification error:', error);
+      toast.error(error.response?.data?.message || 'Invalid OTP. Please try again.');
+    } finally {
       setIsVerifying(false);
-    }, 2000);
+    }
   };
 
-  const resendOtp = () => {
+  const resendOtp = async () => {
     setOtp(['', '', '', '', '', '']);
     setIsOtpVerified(false);
-    toast.success('OTP sent to your phone number');
-    // Focus first input
-    otpRefs.current[0]?.focus();
+
+    try {
+      setLoading(true);
+      const response = await authService.resendOTP(phone);
+
+      if (response && typeof response === 'object' && 'success' in response && response.success) {
+        toast.success('OTP resent to your phone number');
+        // Focus first input
+        otpRefs.current[0]?.focus();
+      } else {
+        toast.error((response as any).message || 'Failed to resend OTP');
+      }
+    } catch (error: any) {
+      console.error('Error resending OTP:', error);
+      toast.error(error.response?.data?.message || 'Failed to resend OTP');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSubmit = () => {
-    // Validation
-    /*  if (!phone || !email || !address || !gstin || categories.length === 0 ||
-       !aadharUri || !panUri || !selfieUri || !shopImageUri) {
-       return toast.error('Please fill all required fields');
-     } */
+  const registerBusinessOwner = async () => {
+    try {
+      setLoading(true);
 
-    // TODO: upload data
-    toast.success('Business registration submitted');
-    navigation.navigate('ThankYou');
+      // Register business owner
+      const registrationData = {
+        email,
+        phoneNumber: phone,
+        businessName,
+        businessType: businessType || categories.join(',')
+      };
+
+      await businessOwnerService.registerBusinessOwner(registrationData);
+
+      // Upload documents
+      await uploadDocuments();
+
+      // Navigate to thank you screen
+      navigation.navigate('ThankYou');
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      Alert.alert(
+        'Registration Error',
+        error.response?.data?.message || 'Failed to register. Please try again.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const uploadDocuments = async () => {
+    try {
+      // Upload Aadhar
+      if (aadharUri) {
+        await uploadFile(aadharUri, 'aadhar');
+      }
+
+      // Upload PAN
+      if (panUri) {
+        await uploadFile(panUri, 'pan');
+      }
+
+      // Upload business images
+      if (shopImageUri) {
+        await uploadFile(shopImageUri, 'business-image');
+      }
+
+      // Upload business video
+      if (shopVideoUri) {
+        await uploadFile(shopVideoUri, 'business-video');
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Document upload error:', error);
+      return false;
+    }
+  };
+
+  const uploadFile = async (uri: string, type: string) => {
+    try {
+      const formData = new FormData();
+
+      // Get file name and type
+      const uriParts = uri.split('.');
+      const fileType = uriParts[uriParts.length - 1];
+
+      // @ts-ignore
+      formData.append('file', {
+        uri,
+        name: `${type}.${fileType}`,
+        type: `${type === 'business-video' ? 'video' : 'image'}/${fileType}`
+      });
+
+      await mediaService.uploadDocument(formData, 'business-owner', type);
+    } catch (error) {
+      console.error(`Error uploading ${type}:`, error);
+      throw error;
+    }
+  };
+
+  const handleSubmit = async () => {
+    // Basic validation
+    if (!phone || !email || !businessName || categories.length === 0) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+
+    // If OTP already verified, register directly
+    if (isOtpVerified) {
+      await registerBusinessOwner();
+    } else {
+      // Send OTP first
+      await sendOtp();
+    }
   };
 
   const renderProgressBar = () => {
@@ -369,7 +628,7 @@ export default function BusinessUploadScreen() {
           </View>
           <TouchableOpacity
             style={[styles.documentUpload, selfieUri && styles.documentUploaded]}
-            onPress={() => pickImage(setSelfieUri)}
+            onPress={() => takeSelfie()}
           >
             {selfieUri ? (
               <>
@@ -382,7 +641,7 @@ export default function BusinessUploadScreen() {
             ) : (
               <>
                 <MaterialCommunityIcons name="camera" size={40} color="#4361EE" />
-                <Text style={styles.documentUploadText}>Tap to upload</Text>
+                <Text style={styles.documentUploadText}>Take Live Selfie</Text>
               </>
             )}
           </TouchableOpacity>
@@ -395,7 +654,7 @@ export default function BusinessUploadScreen() {
           </View>
           <TouchableOpacity
             style={[styles.documentUpload, videoUri && styles.documentUploaded]}
-            onPress={() => pickVideo(setVideoUri)}
+            onPress={() => recordVideo(setVideoUri)}
           >
             {videoUri ? (
               <>
@@ -413,7 +672,7 @@ export default function BusinessUploadScreen() {
             ) : (
               <>
                 <MaterialCommunityIcons name="video-plus" size={40} color="#4361EE" />
-                <Text style={styles.documentUploadText}>Tap to upload</Text>
+                <Text style={styles.documentUploadText}>Record Live Video</Text>
               </>
             )}
           </TouchableOpacity>
@@ -533,7 +792,7 @@ export default function BusinessUploadScreen() {
           <View style={styles.otpActions}>
             <TouchableOpacity
               style={styles.verifyButton}
-              onPress={verifyOtp}
+              onPress={verifyOtpCode}
               disabled={isVerifying || otp.join('').length !== 6}
             >
               <Text style={[
@@ -598,7 +857,7 @@ export default function BusinessUploadScreen() {
         ) : (
           <TouchableOpacity
             style={[styles.submitButton, !isOtpVerified && styles.submitButtonDisabled]}
-            onPress={isOtpVerified ? handleSubmit : verifyOtp}
+            onPress={isOtpVerified ? handleSubmit : verifyOtpCode}
             disabled={!isOtpVerified && otp.join('').length !== 6}
           >
             <Text style={styles.submitButtonText}>
@@ -856,6 +1115,7 @@ const styles = StyleSheet.create({
   documentPreview: {
     width: '100%',
     height: '100%',
+    resizeMode: 'cover',
   },
   documentOverlay: {
     position: 'absolute',

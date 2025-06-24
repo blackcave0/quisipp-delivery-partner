@@ -1,18 +1,29 @@
-import React, { useState, useRef } from 'react';
-import { ScrollView, View, Text, TextInput, TouchableOpacity, Image, StyleSheet, Dimensions } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { ScrollView, View, Text, TextInput, TouchableOpacity, Image, StyleSheet, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Video, ResizeMode } from 'expo-av';
 import { toast } from 'sonner-native';
 import { NavigationProp, useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons, Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { deliveryPartnerService, authService, mediaService } from '../services';
+import { useAuth } from '../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
+
+// Define response type
+interface ApiResponse {
+  success: boolean;
+  message?: string;
+  data?: any;
+}
 
 // Define the stack param list for navigation type
 type RootStackParamList = {
   ThankYou: undefined;
   DeliveryUpload: { type: 'part-time' | 'full-time' };
+  HomeScreen: undefined;
   // add other routes if needed
 };
 
@@ -20,6 +31,8 @@ export default function DeliveryUploadScreen() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'DeliveryUpload'>>();
   const { type } = route.params;
+  const { login, verifyOTP } = useAuth();
+  const [loading, setLoading] = useState(false);
 
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -28,26 +41,146 @@ export default function DeliveryUploadScreen() {
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
   const [videoUri, setVideoUri] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
+  const [vehicleType, setVehicleType] = useState<string | null>(null);
+
+  // Camera permission state
+  const [cameraPermission, setCameraPermission] = useState<boolean | null>(null);
 
   // OTP verification states
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isOtpVerified, setIsOtpVerified] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
   const otpRefs = useRef<TextInput[]>([]);
 
+  // Load stored data if available
+  useEffect(() => {
+    const loadStoredData = async () => {
+      try {
+        const storedEmail = await AsyncStorage.getItem('user_email');
+        const storedPhone = await AsyncStorage.getItem('user_phone');
+        const storedVehicle = await AsyncStorage.getItem('selected_vehicle');
+
+        if (storedEmail) setEmail(storedEmail);
+        if (storedPhone) setPhone(storedPhone);
+        if (storedVehicle) setVehicleType(storedVehicle);
+      } catch (error) {
+        console.error('Error loading stored data:', error);
+      }
+    };
+
+    loadStoredData();
+  }, []);
+
+  // Check camera permissions
+  useEffect(() => {
+    (async () => {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      setCameraPermission(status === 'granted');
+    })();
+  }, []);
+
   const pickImage = async (setUri: (uri: string | null) => void) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return toast.error('Permission denied');
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images' });
-    if (!result.canceled && result.assets && result.assets.length > 0) setUri(result.assets[0].uri);
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        toast.error('Permission denied');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 1.0,
+        presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      toast.error('Failed to pick image');
+    }
   };
 
   const pickVideo = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return toast.error('Permission denied');
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'videos' });
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      setVideoUri(result.assets[0].uri);
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        toast.error('Permission denied');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: false,
+        quality: 1.0,
+        videoMaxDuration: 60,
+        presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setVideoUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking video:', error);
+      toast.error('Failed to pick video');
+    }
+  };
+
+  // Camera functions
+  const takeSelfie = async () => {
+    try {
+      if (!cameraPermission) {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          toast.error('Camera permission is required');
+          return;
+        }
+        setCameraPermission(true);
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: 1,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        aspect: [1, 1],
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setSelfieUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error taking selfie:', error);
+      toast.error('Failed to take selfie');
+    }
+  };
+
+  const recordVideo = async () => {
+    try {
+      if (!cameraPermission) {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          toast.error('Camera permission is required');
+          return;
+        }
+        setCameraPermission(true);
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: 1,
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        videoMaxDuration: 30,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setVideoUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error recording video:', error);
+      toast.error('Failed to record video');
     }
   };
 
@@ -70,7 +203,38 @@ export default function DeliveryUploadScreen() {
     }
   };
 
-  const verifyOtp = async () => {
+  const sendOtp = async () => {
+    if (!phone) {
+      toast.error('Please enter your phone number');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Store phone and email for later use
+      await AsyncStorage.setItem('user_phone', phone);
+      if (email) await AsyncStorage.setItem('user_email', email);
+
+      // Send OTP request
+      const response = await login(phone);
+      if (response && typeof response === 'object' && 'success' in response && response.success) {
+        setOtpSent(true);
+        toast.success('OTP sent to your phone number');
+        // Focus first input
+        otpRefs.current[0]?.focus();
+      } else {
+        toast.error((response as any).message || 'Failed to send OTP');
+      }
+    } catch (error: any) {
+      console.error('Error sending OTP:', error);
+      toast.error(error.response?.data?.message || 'Failed to send OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyOtpCode = async () => {
     const otpString = otp.join('');
     if (otpString.length !== 6) {
       toast.error('Please enter complete OTP');
@@ -79,47 +243,169 @@ export default function DeliveryUploadScreen() {
 
     setIsVerifying(true);
 
-    // Simulate OTP verification (replace with actual API call)
-    setTimeout(() => {
-      if (otpString === '123456') { // Demo OTP
+    try {
+      const response = await verifyOTP(phone, otpString);
+
+      if (response && typeof response === 'object' && 'success' in response && response.success) {
         setIsOtpVerified(true);
         toast.success('OTP verified successfully');
-        // Proceed to submit
-        handleSubmit();
+
+        // Register delivery partner
+        await registerDeliveryPartner();
       } else {
-        toast.error('Invalid OTP. Please try again.');
+        toast.error((response as any).message || 'Invalid OTP. Please try again.');
       }
+    } catch (error: any) {
+      console.error('OTP verification error:', error);
+      toast.error(error.response?.data?.message || 'Invalid OTP. Please try again.');
+    } finally {
       setIsVerifying(false);
-    }, 2000);
+    }
   };
 
-  const resendOtp = () => {
+  const resendOtp = async () => {
     setOtp(['', '', '', '', '', '']);
     setIsOtpVerified(false);
-    toast.success('OTP sent to your phone number');
-    // Focus first input
-    otpRefs.current[0]?.focus();
+
+    try {
+      setLoading(true);
+      const response = await authService.resendOTP(phone);
+
+      if (response && typeof response === 'object' && 'success' in response && response.success) {
+        toast.success('OTP resent to your phone number');
+        // Focus first input
+        otpRefs.current[0]?.focus();
+      } else {
+        toast.error((response as any).message || 'Failed to resend OTP');
+      }
+    } catch (error: any) {
+      console.error('Error resending OTP:', error);
+      toast.error(error.response?.data?.message || 'Failed to resend OTP');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSubmit = () => {
-    // TODO: upload data
-    toast.success('Delivery registration submitted');
-    navigation.navigate('ThankYou');
+  const registerDeliveryPartner = async () => {
+    try {
+      setLoading(true);
+
+      // Register delivery partner
+      const registrationData = {
+        email,
+        phoneNumber: phone,
+        vehicleType: vehicleType || 'motorcycle',
+        employmentType: type
+      };
+
+      await deliveryPartnerService.registerDeliveryPartner(registrationData);
+
+      // Upload documents
+      await uploadDocuments();
+
+      // Navigate to thank you screen
+      navigation.navigate('ThankYou');
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      Alert.alert(
+        'Registration Error',
+        error.response?.data?.message || 'Failed to register. Please try again.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const uploadDocuments = async () => {
+    try {
+      // Upload Aadhar
+      if (aadharUri) {
+        await uploadFile(aadharUri, 'aadhar');
+      }
+
+      // Upload PAN
+      if (panUri) {
+        await uploadFile(panUri, 'pan');
+      }
+
+      // Upload selfie
+      if (selfieUri) {
+        await uploadFile(selfieUri, 'selfie');
+      }
+
+      // Upload video
+      if (videoUri) {
+        await uploadFile(videoUri, 'video');
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Document upload error:', error);
+      return false;
+    }
+  };
+
+  const uploadFile = async (uri: string, type: string) => {
+    try {
+      const formData = new FormData();
+
+      // Get file name and type
+      const uriParts = uri.split('.');
+      const fileType = uriParts[uriParts.length - 1];
+
+      // @ts-ignore
+      formData.append('file', {
+        uri,
+        name: `${type}.${fileType}`,
+        type: `${type === 'video' ? 'video' : 'image'}/${fileType}`
+      });
+
+      await mediaService.uploadDocument(formData, 'delivery-partner', type);
+    } catch (error) {
+      console.error(`Error uploading ${type}:`, error);
+      throw error;
+    }
+  };
+
+  const handleSubmit = async () => {
+    // Basic validation
+    if (!phone || !email) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+
+    // If OTP already verified, register directly
+    if (isOtpVerified) {
+      await registerDeliveryPartner();
+    } else {
+      // Send OTP first
+      await sendOtp();
+    }
   };
 
   const nextStep = () => {
-    if (currentStep < 3) {
-      if (currentStep === 2) {
-        // Send OTP when moving to OTP verification step
-        toast.success('OTP sent to your phone number');
+    if (currentStep === 1) {
+      // Validate personal info
+      if (!phone || !email) {
+        toast.error('Please fill all required fields');
+        return;
       }
-      setCurrentStep(currentStep + 1);
+      setCurrentStep(2);
+    } else if (currentStep === 2) {
+      // Validate documents
+      if (!aadharUri || !panUri) {
+        toast.error('Please upload required documents');
+        return;
+      }
+      setCurrentStep(3);
+      // Send OTP when moving to OTP verification step
+      sendOtp();
     } else {
-      // On step 3 (OTP), verify OTP instead of submitting directly
+      // On step 3 (OTP), verify OTP
       if (!isOtpVerified) {
-        verifyOtp();
+        verifyOtpCode();
       } else {
-        handleSubmit();
+        registerDeliveryPartner();
       }
     }
   };
@@ -131,6 +417,8 @@ export default function DeliveryUploadScreen() {
       navigation.goBack();
     }
   };
+
+
 
   return (
     <View style={styles.mainContainer}>
@@ -227,7 +515,12 @@ export default function DeliveryUploadScreen() {
                   onPress={() => pickImage(setAadharUri)}
                 >
                   {aadharUri ? (
-                    <Image source={{ uri: aadharUri }} style={styles.documentPreview} />
+                    <View style={styles.imagePreviewContainer}>
+                      <Image source={{ uri: aadharUri }} style={styles.documentPreview} />
+                      <View style={styles.checkOverlay}>
+                        <MaterialIcons name="check-circle" size={36} color="#4CC9F0" />
+                      </View>
+                    </View>
                   ) : (
                     <View style={styles.placeholderContainer}>
                       <MaterialIcons name="badge" size={48} color="#4361EE" />
@@ -247,7 +540,12 @@ export default function DeliveryUploadScreen() {
                   onPress={() => pickImage(setPanUri)}
                 >
                   {panUri ? (
-                    <Image source={{ uri: panUri }} style={styles.documentPreview} />
+                    <View style={styles.imagePreviewContainer}>
+                      <Image source={{ uri: panUri }} style={styles.documentPreview} />
+                      <View style={styles.checkOverlay}>
+                        <MaterialIcons name="check-circle" size={36} color="#4CC9F0" />
+                      </View>
+                    </View>
                   ) : (
                     <View style={styles.placeholderContainer}>
                       <MaterialIcons name="credit-card" size={48} color="#4361EE" />
@@ -264,16 +562,21 @@ export default function DeliveryUploadScreen() {
                 <Text style={styles.documentTitle}>Live Selfie</Text>
                 <TouchableOpacity
                   style={[styles.uploadContainer, styles.selfieContainer]}
-                  onPress={() => pickImage(setSelfieUri)}
+                  onPress={takeSelfie}
                 >
                   {selfieUri ? (
-                    <Image source={{ uri: selfieUri }} style={styles.selfiePreview} />
+                    <View style={styles.imagePreviewContainer}>
+                      <Image source={{ uri: selfieUri }} style={styles.selfiePreview} />
+                      <View style={styles.checkOverlay}>
+                        <MaterialIcons name="check-circle" size={36} color="#4CC9F0" />
+                      </View>
+                    </View>
                   ) : (
                     <View style={styles.placeholderContainer}>
                       <Ionicons name="person-circle-outline" size={64} color="#4361EE" />
                       <View style={styles.uploadOverlay}>
                         <Ionicons name="camera-outline" size={32} color="#fff" />
-                        <Text style={styles.uploadText}>Take Selfie</Text>
+                        <Text style={styles.uploadText}>Take Live Selfie</Text>
                       </View>
                     </View>
                   )}
@@ -284,16 +587,21 @@ export default function DeliveryUploadScreen() {
                 <Text style={styles.documentTitle}>Verification Video</Text>
                 <TouchableOpacity
                   style={styles.uploadContainer}
-                  onPress={pickVideo}
+                  onPress={recordVideo}
                 >
                   {videoUri ? (
-                    <Video source={{ uri: videoUri }} style={styles.documentPreview} useNativeControls resizeMode={ResizeMode.COVER} />
+                    <View style={styles.imagePreviewContainer}>
+                      <Video source={{ uri: videoUri }} style={styles.documentPreview} useNativeControls resizeMode={ResizeMode.COVER} />
+                      <View style={styles.checkOverlay}>
+                        <MaterialIcons name="check-circle" size={36} color="#4CC9F0" />
+                      </View>
+                    </View>
                   ) : (
                     <View style={styles.placeholderContainer}>
                       <Ionicons name="videocam" size={48} color="#4361EE" />
                       <View style={styles.uploadOverlay}>
                         <Ionicons name="videocam-outline" size={32} color="#fff" />
-                        <Text style={styles.uploadText}>Record Video</Text>
+                        <Text style={styles.uploadText}>Record Live Video</Text>
                       </View>
                     </View>
                   )}
@@ -340,7 +648,7 @@ export default function DeliveryUploadScreen() {
                 <View style={styles.otpActions}>
                   <TouchableOpacity
                     style={styles.verifyButton}
-                    onPress={verifyOtp}
+                    onPress={verifyOtpCode}
                     disabled={isVerifying || otp.join('').length !== 6}
                   >
                     <Text style={[
@@ -611,10 +919,12 @@ const styles = StyleSheet.create({
   documentPreview: {
     width: '100%',
     height: '100%',
+    resizeMode: 'cover',
   },
   selfiePreview: {
     width: '100%',
     height: '100%',
+    resizeMode: 'cover',
   },
   footer: {
     position: 'absolute',
@@ -732,4 +1042,21 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.6,
   },
+  imagePreviewContainer: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+  },
+  checkOverlay: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    width: 40,
+    height: 40,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
 });

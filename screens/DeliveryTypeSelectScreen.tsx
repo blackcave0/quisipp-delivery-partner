@@ -1,11 +1,12 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Image, Dimensions, Alert, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFonts, Lato_400Regular, Lato_700Bold, Inter_400Regular, Inter_700Bold, Poppins_700Bold, Poppins_400Regular } from '@expo-google-fonts/dev';
-// import AppLoading from 'expo-app-loading';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { deliveryPartnerService } from '../services';
 
 // Define your stack param list
 type RootStackParamList = {
@@ -17,6 +18,29 @@ const { width } = Dimensions.get('window');
 
 export default function DeliveryTypeSelectScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState<string | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
+  const [vehicleType, setVehicleType] = useState<string | null>(null);
+
+  // Fetch stored data
+  useEffect(() => {
+    const getStoredData = async () => {
+      try {
+        const storedEmail = await AsyncStorage.getItem('user_email');
+        const storedPhone = await AsyncStorage.getItem('user_phone');
+        const storedVehicle = await AsyncStorage.getItem('selected_vehicle');
+
+        if (storedEmail) setEmail(storedEmail);
+        if (storedPhone) setPhoneNumber(storedPhone);
+        if (storedVehicle) setVehicleType(storedVehicle);
+      } catch (error) {
+        console.error('Error fetching stored data:', error);
+      }
+    };
+
+    getStoredData();
+  }, []);
 
   let [fontsLoaded] = useFonts({
     Lato_400Regular,
@@ -31,8 +55,43 @@ export default function DeliveryTypeSelectScreen() {
     return null;
   }
 
-  const handleSelect = (type: string) => {
-    navigation.navigate('DeliveryUpload', { type });
+  const handleSelect = async (employmentType: string) => {
+    try {
+      setLoading(true);
+
+      // Store employment type
+      await AsyncStorage.setItem('employment_type', employmentType);
+
+      // If we have all required data, we could register the user here
+      if (email && phoneNumber && vehicleType) {
+        try {
+          // Register delivery partner
+          const registrationData = {
+            email,
+            phoneNumber,
+            vehicleType,
+            employmentType
+          };
+
+          // We'll just navigate for now, but in a real app you might register here
+          // const response = await deliveryPartnerService.registerDeliveryPartner(registrationData);
+
+          // Navigate to upload screen
+          navigation.navigate('DeliveryUpload', { type: employmentType });
+        } catch (error: any) {
+          console.error('Registration error:', error);
+          Alert.alert('Registration Error', error.response?.data?.message || 'Failed to register. Please try again.');
+        }
+      } else {
+        // Just navigate if we don't have all the data yet
+        navigation.navigate('DeliveryUpload', { type: employmentType });
+      }
+    } catch (error) {
+      console.error('Error selecting employment type:', error);
+      Alert.alert('Error', 'Failed to select employment type. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Generate image URLs for illustrations
@@ -51,6 +110,7 @@ export default function DeliveryTypeSelectScreen() {
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
+          disabled={loading}
         >
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
@@ -58,93 +118,102 @@ export default function DeliveryTypeSelectScreen() {
         <Text style={[styles.subtitle, { color: '#000', fontFamily: 'Lato_400Regular' }]}>Select how you want to work with us</Text>
       </View>
 
-      <View style={styles.cardsContainer}>
-        <View style={styles.cardWrapper}>
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => handleSelect('part-time')}
-            activeOpacity={0.9}
-          >
-            <LinearGradient
-              colors={['#303A52', '#303A52']}
-              style={styles.cardGradient}
-            >
-              <View style={styles.cardHeader}>
-                <View style={[styles.iconContainer, styles.partTimeIcon]}>
-                  <MaterialCommunityIcons name="clock-outline" size={32} color="#F72585" />
-                </View>
-                <Text style={[styles.cardTitle, { fontFamily: 'Inter_700Bold' }]}>Part-Time</Text>
-              </View>
-
-              <View style={styles.cardContent}>
-                <Image source={{ uri: partTimeIllustrationUrl }} style={styles.illustration} />
-                <View style={styles.featuresList}>
-                  <View style={styles.featureItem}>
-                    <Ionicons name="checkmark-circle" size={20} color="#F72585" />
-                    <Text style={[styles.featureText, { fontFamily: 'Inter_400Regular' }]}>Earn ₹16000 - ₹20000 per month</Text>
-                  </View>
-                  <View style={styles.featureItem}>
-                    <Ionicons name="checkmark-circle" size={20} color="#F72585" />
-                    <Text style={[styles.featureText, { fontFamily: 'Inter_400Regular' }]}>Work When You Want</Text>
-                  </View>
-                  <View style={styles.featureItem}>
-                    <Ionicons name="checkmark-circle" size={20} color="#F72585" />
-                    <Text style={[styles.featureText, { fontFamily: 'Inter_400Regular' }]}>Earn Extra Income</Text>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.cardFooter}>
-                <Text style={[styles.selectText, { fontFamily: 'Lato_700Bold' }]}>Select Part-Time</Text>
-                <Ionicons name="arrow-forward-circle" size={24} color="#F72585" />
-              </View>
-            </LinearGradient>
-          </TouchableOpacity>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3A0CA3" />
+          <Text style={{ marginTop: 10, fontFamily: 'Lato_400Regular' }}>Processing your selection...</Text>
         </View>
-
-        <View style={styles.cardWrapper}>
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => handleSelect('full-time')}
-            activeOpacity={0.9}
-          >
-            <LinearGradient
-              colors={['#FFAAA5', '#FFAAA5']}
-              style={styles.cardGradient}
+      ) : (
+        <View style={styles.cardsContainer}>
+          <View style={styles.cardWrapper}>
+            <TouchableOpacity
+              style={styles.card}
+              onPress={() => handleSelect('part-time')}
+              activeOpacity={0.9}
+              disabled={loading}
             >
-              <View style={styles.cardHeader}>
-                <View style={[styles.iconContainer, styles.fullTimeIcon]}>
-                  <MaterialCommunityIcons name="timer-sand-complete" size={32} color="#3A0CA3" />
+              <LinearGradient
+                colors={['#303A52', '#303A52']}
+                style={styles.cardGradient}
+              >
+                <View style={styles.cardHeader}>
+                  <View style={[styles.iconContainer, styles.partTimeIcon]}>
+                    <MaterialCommunityIcons name="clock-outline" size={32} color="#F72585" />
+                  </View>
+                  <Text style={[styles.cardTitle, { fontFamily: 'Inter_700Bold' }]}>Part-Time</Text>
                 </View>
-                <Text style={[styles.cardTitle, { color: '#000', fontFamily: 'Inter_700Bold' }]}>Full-Time</Text>
-              </View>
 
-              <View style={styles.cardContent}>
-                <Image source={{ uri: fullTimeIllustrationUrl }} style={styles.illustration} />
-                <View style={styles.featuresList}>
-                  <View style={styles.featureItem}>
-                    <Ionicons name="checkmark-circle" size={20} color="#3A0CA3" />
-                    <Text style={[styles.featureText, { color: '#000', fontFamily: 'Inter_400Regular' }]}>Earn ₹25000 - ₹30000 per month</Text>
-                  </View>
-                  <View style={styles.featureItem}>
-                    <Ionicons name="checkmark-circle" size={20} color="#3A0CA3" />
-                    <Text style={[styles.featureText, { color: '#000', fontFamily: 'Inter_400Regular' }]}>Higher Priority Orders</Text>
-                  </View>
-                  <View style={styles.featureItem}>
-                    <Ionicons name="checkmark-circle" size={20} color="#3A0CA3" />
-                    <Text style={[styles.featureText, { color: '#000', fontFamily: 'Inter_400Regular' }]}>Consistent Income</Text>
+                <View style={styles.cardContent}>
+                  <Image source={{ uri: partTimeIllustrationUrl }} style={styles.illustration} />
+                  <View style={styles.featuresList}>
+                    <View style={styles.featureItem}>
+                      <Ionicons name="checkmark-circle" size={20} color="#F72585" />
+                      <Text style={[styles.featureText, { fontFamily: 'Inter_400Regular' }]}>Earn ₹16000 - ₹20000 per month</Text>
+                    </View>
+                    <View style={styles.featureItem}>
+                      <Ionicons name="checkmark-circle" size={20} color="#F72585" />
+                      <Text style={[styles.featureText, { fontFamily: 'Inter_400Regular' }]}>Work When You Want</Text>
+                    </View>
+                    <View style={styles.featureItem}>
+                      <Ionicons name="checkmark-circle" size={20} color="#F72585" />
+                      <Text style={[styles.featureText, { fontFamily: 'Inter_400Regular' }]}>Earn Extra Income</Text>
+                    </View>
                   </View>
                 </View>
-              </View>
 
-              <View style={styles.cardFooter}>
-                <Text style={[styles.selectText, styles.fullTimeText, { fontFamily: 'Lato_700Bold' }]}>Select Full-Time</Text>
-                <Ionicons name="arrow-forward-circle" size={24} color="#3A0CA3" />
-              </View>
-            </LinearGradient>
-          </TouchableOpacity>
+                <View style={styles.cardFooter}>
+                  <Text style={[styles.selectText, { fontFamily: 'Lato_700Bold' }]}>Select Part-Time</Text>
+                  <Ionicons name="arrow-forward-circle" size={24} color="#F72585" />
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.cardWrapper}>
+            <TouchableOpacity
+              style={styles.card}
+              onPress={() => handleSelect('full-time')}
+              activeOpacity={0.9}
+              disabled={loading}
+            >
+              <LinearGradient
+                colors={['#FFAAA5', '#FFAAA5']}
+                style={styles.cardGradient}
+              >
+                <View style={styles.cardHeader}>
+                  <View style={[styles.iconContainer, styles.fullTimeIcon]}>
+                    <MaterialCommunityIcons name="timer-sand-complete" size={32} color="#3A0CA3" />
+                  </View>
+                  <Text style={[styles.cardTitle, { color: '#000', fontFamily: 'Inter_700Bold' }]}>Full-Time</Text>
+                </View>
+
+                <View style={styles.cardContent}>
+                  <Image source={{ uri: fullTimeIllustrationUrl }} style={styles.illustration} />
+                  <View style={styles.featuresList}>
+                    <View style={styles.featureItem}>
+                      <Ionicons name="checkmark-circle" size={20} color="#3A0CA3" />
+                      <Text style={[styles.featureText, { color: '#000', fontFamily: 'Inter_400Regular' }]}>Earn ₹25000 - ₹30000 per month</Text>
+                    </View>
+                    <View style={styles.featureItem}>
+                      <Ionicons name="checkmark-circle" size={20} color="#3A0CA3" />
+                      <Text style={[styles.featureText, { color: '#000', fontFamily: 'Inter_400Regular' }]}>Higher Priority Orders</Text>
+                    </View>
+                    <View style={styles.featureItem}>
+                      <Ionicons name="checkmark-circle" size={20} color="#3A0CA3" />
+                      <Text style={[styles.featureText, { color: '#000', fontFamily: 'Inter_400Regular' }]}>Consistent Income</Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.cardFooter}>
+                  <Text style={[styles.selectText, styles.fullTimeText, { fontFamily: 'Lato_700Bold' }]}>Select Full-Time</Text>
+                  <Ionicons name="arrow-forward-circle" size={24} color="#3A0CA3" />
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      )}
     </View>
   );
 }
@@ -183,7 +252,6 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    // fontWeight: 'bold',
     color: '#000',
     textAlign: 'center',
   },
@@ -193,6 +261,11 @@ const styles = StyleSheet.create({
     marginTop: 10,
     textAlign: 'center',
     marginBottom: 30,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   cardsContainer: {
     width: '100%',
@@ -248,7 +321,7 @@ const styles = StyleSheet.create({
   illustration: {
     width: width * 0.3,
     height: width * 0.3,
-    borderRadius: 12,
+    borderRadius: 10,
     marginRight: 15,
   },
   featuresList: {
@@ -264,21 +337,19 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 14,
     color: '#fff',
+    flexShrink: 1,
   },
   cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.05)',
-    paddingTop: 15,
+    marginTop: 10,
   },
   selectText: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#F72585',
+    color: '#fff',
   },
   fullTimeText: {
-    color: '#3A0CA3',
+    color: '#000',
   },
 });

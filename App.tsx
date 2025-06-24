@@ -13,30 +13,53 @@ import "./global.css";
 import SelectVehicle from './screens/SelectVehicle';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ThankYouScreen from './screens/ThankYouScreen';
+import HomeScreen from './screens/HomeScreen';
 import { requestAllPermissions } from './utils/permissions';
 import { initializeNotifications } from './utils/notificationExamples';
-
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 const Stack = createNativeStackNavigator();
 
 function RootStack() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  // Show splash screen while checking authentication
+  if (isLoading) {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Splash" component={SplashScreen} />
+      </Stack.Navigator>
+    );
+  }
+
   return (
     <Stack.Navigator
-      initialRouteName="Splash"
+      initialRouteName={isAuthenticated ? "HomeScreen" : "Splash"}
       screenOptions={{ headerShown: false }}
     >
-      <Stack.Screen name="Splash" component={SplashScreen} />
-      <Stack.Screen name="RoleSelect" component={RoleSelectScreen} />
-      <Stack.Screen name="DeliveryType" component={DeliveryTypeSelectScreen} />
-      <Stack.Screen name="DeliveryUpload" component={DeliveryUploadScreen} />
-      <Stack.Screen name="BusinessUpload" component={BusinessUploadScreen} />
-      <Stack.Screen name="SelectVehicle" component={SelectVehicle} />
-      <Stack.Screen name="ThankYou" component={ThankYouScreen} />
+      {isAuthenticated ? (
+        // Authenticated routes
+        <>
+          <Stack.Screen name="HomeScreen" component={HomeScreen} />
+        </>
+      ) : (
+        // Unauthenticated routes
+        <>
+          <Stack.Screen name="Splash" component={SplashScreen} />
+          <Stack.Screen name="RoleSelect" component={RoleSelectScreen} />
+          <Stack.Screen name="DeliveryType" component={DeliveryTypeSelectScreen} />
+          <Stack.Screen name="DeliveryUpload" component={DeliveryUploadScreen} />
+          <Stack.Screen name="BusinessUpload" component={BusinessUploadScreen} />
+          <Stack.Screen name="SelectVehicle" component={SelectVehicle} />
+          <Stack.Screen name="ThankYou" component={ThankYouScreen} />
+          <Stack.Screen name="HomeScreen" component={HomeScreen} />
+        </>
+      )}
     </Stack.Navigator>
   );
 }
 
-export default function App() {
+function AppWithAuth() {
   useEffect(() => {
     // Request permissions and initialize notifications when the app starts
     const setupApp = async () => {
@@ -48,12 +71,20 @@ export default function App() {
   }, []);
 
   return (
+    <NavigationContainer>
+      <RootStack />
+    </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider style={styles.container}>
         <Toaster />
-        <NavigationContainer>
-          <RootStack />
-        </NavigationContainer>
+        <AuthProvider>
+          <AppWithAuth />
+        </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

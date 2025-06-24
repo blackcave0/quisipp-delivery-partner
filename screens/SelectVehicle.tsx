@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Image, Dimensions, ScrollView, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, Image, Dimensions, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 // import { styled } from 'nativewind';
-import { useFonts, Lato_400Regular, Lato_700Bold, Lato_900Black, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Poppins_800ExtraBold, Poppins_900Black, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, Inter_900Black, Montserrat_500Medium, Montserrat_600SemiBold, Montserrat_800ExtraBold, Montserrat_900Black, Montserrat_700Bold, Montserrat_400Regular,  } from '@expo-google-fonts/dev';
+import { useFonts, Lato_400Regular, Lato_700Bold, Lato_900Black, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Poppins_800ExtraBold, Poppins_900Black, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, Inter_900Black, Montserrat_500Medium, Montserrat_600SemiBold, Montserrat_800ExtraBold, Montserrat_900Black, Montserrat_700Bold, Montserrat_400Regular, } from '@expo-google-fonts/dev';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { deliveryPartnerService } from '../services';
 
 const { width } = Dimensions.get('window');
 
@@ -30,6 +32,46 @@ const vehicles = [
 
 const SelectVehicle = ({ navigation }: { navigation: any }) => {
   const [selected, setSelected] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState<string | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
+
+  // Fetch email and phone number from storage if available
+  useEffect(() => {
+    const getStoredUserInfo = async () => {
+      try {
+        const storedEmail = await AsyncStorage.getItem('user_email');
+        const storedPhone = await AsyncStorage.getItem('user_phone');
+
+        if (storedEmail) setEmail(storedEmail);
+        if (storedPhone) setPhoneNumber(storedPhone);
+      } catch (error) {
+        console.error('Error fetching stored user info:', error);
+      }
+    };
+
+    getStoredUserInfo();
+  }, []);
+
+  const handleNext = async () => {
+    if (!selected) return;
+
+    try {
+      setLoading(true);
+
+      // Store selected vehicle
+      await AsyncStorage.setItem('selected_vehicle', selected);
+
+      // If we have email and phone, we could register the user here
+      // But for now, we'll just navigate to the next screen
+      navigation.navigate('DeliveryType');
+    } catch (error) {
+      console.error('Error selecting vehicle:', error);
+      Alert.alert('Error', 'Failed to select vehicle. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   let [fontsLoaded] = useFonts({
     Lato_400Regular,
@@ -113,10 +155,14 @@ const SelectVehicle = ({ navigation }: { navigation: any }) => {
         <TouchableOpacity
           className={`w-full py-4 rounded-xl items-center ${selected ? 'bg-[#2940D3]' : 'bg-gray-300'
             }`}
-          disabled={!selected}
-          onPress={() => navigation.navigate('DeliveryType')}
+          disabled={!selected || loading}
+          onPress={handleNext}
         >
-          <Text className="text-white text-xl " style={{ fontFamily: 'Poppins_700Bold' }}>Next</Text>
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text className="text-white text-xl " style={{ fontFamily: 'Poppins_700Bold' }}>Next</Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>

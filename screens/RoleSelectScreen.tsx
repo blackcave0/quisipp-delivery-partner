@@ -1,22 +1,69 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Image, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
-import { useFonts, Lato_400Regular, Lato_700Bold, Lato_900Black, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Poppins_800ExtraBold, Poppins_900Black, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, Inter_900Black, CinzelDecorative_700Bold, CinzelDecorative_900Black, Cinzel_700Bold, Cinzel_900Black, Cinzel_400Regular, Cinzel_500Medium, Cinzel_600SemiBold, Cinzel_800ExtraBold,  } from '@expo-google-fonts/dev';
+import { useFonts, Lato_400Regular, Lato_700Bold, Lato_900Black, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Poppins_800ExtraBold, Poppins_900Black, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, Inter_900Black, CinzelDecorative_700Bold, CinzelDecorative_900Black, Cinzel_700Bold, Cinzel_900Black, Cinzel_400Regular, Cinzel_500Medium, Cinzel_600SemiBold, Cinzel_800ExtraBold, } from '@expo-google-fonts/dev';
 import AppLogo from '../components/AppLogo';
-
+import { authService } from '../services';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type RootStackParamList = {
   DeliveryType: undefined;
   BusinessUpload: undefined;
   SelectVehicle: undefined;
+  HomeScreen: undefined;
   // add other routes here if needed
 };
 
+// Define user data type
+interface UserData {
+  role?: string;
+  [key: string]: any;
+}
+
 export default function RoleSelectScreen({ navigation }: { navigation: StackNavigationProp<RootStackParamList> }) {
-  // const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+  const [loading, setLoading] = useState(false);
+
+  // Check if user is already logged in and has selected a role
+  useEffect(() => {
+    const checkUserSession = async () => {
+      try {
+        const userData = await authService.getStoredUserData() as UserData | null;
+        if (userData && userData.role) {
+          // If user is already logged in and has a role, navigate to home screen
+          navigation.replace('HomeScreen');
+        }
+      } catch (error) {
+        console.error('Error checking user session:', error);
+      }
+    };
+
+    checkUserSession();
+  }, [navigation]);
+
+  // Function to handle role selection
+  const handleRoleSelect = async (role: 'delivery-partner' | 'business-owner') => {
+    try {
+      setLoading(true);
+
+      // Store the selected role temporarily
+      await AsyncStorage.setItem('selected_role', role);
+
+      // Navigate to the appropriate screen based on role
+      if (role === 'delivery-partner') {
+        navigation.navigate('SelectVehicle');
+      } else {
+        navigation.navigate('BusinessUpload');
+      }
+    } catch (error) {
+      console.error('Error selecting role:', error);
+      Alert.alert('Error', 'Failed to select role. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   let [fontsLoaded] = useFonts({
     Lato_400Regular,
@@ -89,8 +136,9 @@ export default function RoleSelectScreen({ navigation }: { navigation: StackNavi
           {/* Delivery Partner Card */}
           <TouchableOpacity
             style={styles.card}
-            onPress={() => navigation.navigate('SelectVehicle')}
+            onPress={() => handleRoleSelect('delivery-partner')}
             activeOpacity={0.9}
+            disabled={loading}
           >
             <View className='p-6'>
               <View className='flex-row items-start justify-between'>
@@ -129,8 +177,9 @@ export default function RoleSelectScreen({ navigation }: { navigation: StackNavi
           {/* Business Owner Card */}
           <TouchableOpacity
             style={styles.card}
-            onPress={() => navigation.navigate('BusinessUpload')}
+            onPress={() => handleRoleSelect('business-owner')}
             activeOpacity={0.9}
+            disabled={loading}
           >
             <View className='p-6'>
               <View className='flex-row items-start justify-between'>

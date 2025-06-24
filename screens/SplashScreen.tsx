@@ -1,25 +1,30 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
+import { useAuth } from '../contexts/AuthContext';
+import { authService } from '../services';
 
 const { width, height } = Dimensions.get('window');
 type RootStackParamList = {
   RoleSelect: undefined;
+  HomeScreen: undefined;
   // add other routes here if needed
 };
 
 export default function SplashScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+  const { isAuthenticated } = useAuth();
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const textOpacityAnim = useRef(new Animated.Value(0)).current;
-  // const textOpacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Sequence of animations
+    // Start animations
     Animated.sequence([
       // First animate the icon scaling up
       Animated.spring(scaleAnim, {
@@ -42,11 +47,32 @@ export default function SplashScreen() {
       })
     ]).start();
 
-    const timer = setTimeout(() => {
-      navigation.navigate('RoleSelect');
-    }, 2500);
-    return () => clearTimeout(timer);
-  }, []);
+    // Check authentication status
+    const checkAuth = async () => {
+      try {
+        const isLoggedIn = await authService.isLoggedIn();
+
+        // Wait for animations to complete
+        setTimeout(() => {
+          setCheckingAuth(false);
+          if (isLoggedIn) {
+            navigation.replace('HomeScreen');
+          } else {
+            navigation.replace('RoleSelect');
+          }
+        }, 2000);
+      } catch (error) {
+        console.error('Auth check error:', error);
+        // If there's an error, navigate to role select after animations
+        setTimeout(() => {
+          setCheckingAuth(false);
+          navigation.replace('RoleSelect');
+        }, 2000);
+      }
+    };
+
+    checkAuth();
+  }, [navigation]);
 
   return (
     <LinearGradient
