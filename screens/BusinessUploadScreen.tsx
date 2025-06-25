@@ -137,12 +137,19 @@ export default function BusinessUploadScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Videos,
         allowsEditing: false,
         quality: 1.0,
-        videoMaxDuration: 60,
+        videoMaxDuration: 30, // 1 minute max
         presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
+        // Check video duration if possible
+        if (result.assets[0].duration && result.assets[0].duration > 60000) {
+          toast.error('Video must be less than 1 minute long');
+          return;
+        }
+
         setter(result.assets[0].uri);
+        toast.success('Video selected successfully');
       }
     } catch (error) {
       console.error('Error picking video:', error);
@@ -189,11 +196,18 @@ export default function BusinessUploadScreen() {
         allowsEditing: true,
         quality: 1,
         mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-        videoMaxDuration: 30,
+        videoMaxDuration: 60, // 1 minute max
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
+        // Check video duration if possible
+        if (result.assets[0].duration && result.assets[0].duration > 60000) {
+          toast.error('Video must be less than 1 minute long');
+          return;
+        }
+
         setter(result.assets[0].uri);
+        toast.success('Video recorded successfully');
       }
     } catch (error) {
       console.error('Error recording video:', error);
@@ -353,6 +367,16 @@ export default function BusinessUploadScreen() {
         await uploadFile(panUri, 'pan');
       }
 
+      // Upload selfie
+      if (selfieUri) {
+        await uploadFile(selfieUri, 'selfie');
+      }
+
+      // Upload verification video
+      if (videoUri) {
+        await uploadFile(videoUri, 'video');
+      }
+
       // Upload business images
       if (shopImageUri) {
         await uploadFile(shopImageUri, 'business-image');
@@ -366,6 +390,7 @@ export default function BusinessUploadScreen() {
       return true;
     } catch (error) {
       console.error('Document upload error:', error);
+      toast.error('Failed to upload some documents. Please try again.');
       return false;
     }
   };
@@ -382,20 +407,50 @@ export default function BusinessUploadScreen() {
       formData.append('file', {
         uri,
         name: `${type}.${fileType}`,
-        type: `${type === 'business-video' ? 'video' : 'image'}/${fileType}`
+        type: `${type === 'business-video' || type === 'video' ? 'video' : 'image'}/${fileType}`
       });
 
-      await mediaService.uploadDocument(formData, 'business-owner', type);
+      const response = await mediaService.uploadDocument(formData, 'business-owner', type);
+
+      if (response && typeof response === 'object' && 'success' in response) {
+        toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} uploaded successfully`);
+      }
+
+      return response;
     } catch (error) {
       console.error(`Error uploading ${type}:`, error);
+      toast.error(`Failed to upload ${type}. Please try again.`);
       throw error;
     }
   };
 
   const handleSubmit = async () => {
-    // Basic validation
-    if (!phone || !email || !businessName || categories.length === 0) {
-      toast.error('Please fill all required fields');
+    // Comprehensive validation for all required fields
+    const missingFields = [];
+
+    // Basic information validation
+    if (!phone || phone.length !== 10) missingFields.push('Valid Phone Number (10 digits)');
+    if (!email || !email.includes('@')) missingFields.push('Valid Email Address');
+    if (!businessName) missingFields.push('Business Name');
+    if (!gstin) missingFields.push('GSTIN Number');
+    if (!address) missingFields.push('Shop Address');
+
+    // Categories validation
+    if (categories.length === 0) missingFields.push('At least one Business Category');
+
+    // Personal documents validation
+    if (!aadharUri) missingFields.push('Aadhar Card');
+    if (!panUri) missingFields.push('PAN Card');
+    if (!selfieUri) missingFields.push('Selfie');
+    if (!videoUri) missingFields.push('Verification Video');
+
+    // Business documents validation
+    if (!shopImageUri) missingFields.push('Shop Image');
+    if (!shopVideoUri) missingFields.push('Shop Video');
+
+    // If any required fields are missing, show toast and return
+    if (missingFields.length > 0) {
+      toast.error(`Please provide: ${missingFields.join(', ')}`);
       return;
     }
 
@@ -466,9 +521,10 @@ export default function BusinessUploadScreen() {
           <MaterialIcons name="phone" size={20} color="#4361EE" style={styles.inputIcon} />
           <TextInput
             style={styles.input}
-            placeholder="Phone Number"
+            placeholder="Phone Number (10 digits) *"
             keyboardType="phone-pad"
             value={phone}
+            maxLength={10}
             onChangeText={setPhone}
             placeholderTextColor="#999"
           />
@@ -478,7 +534,7 @@ export default function BusinessUploadScreen() {
           <MaterialIcons name="email" size={20} color="#4361EE" style={styles.inputIcon} />
           <TextInput
             style={styles.input}
-            placeholder="Email Address"
+            placeholder="Email Address *"
             keyboardType="email-address"
             value={email}
             onChangeText={setEmail}
@@ -487,10 +543,21 @@ export default function BusinessUploadScreen() {
         </View>
 
         <View style={styles.inputContainer}>
+          <MaterialIcons name="business" size={20} color="#4361EE" style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Business Name *"
+            value={businessName}
+            onChangeText={setBusinessName}
+            placeholderTextColor="#999"
+          />
+        </View>
+
+        <View style={styles.inputContainer}>
           <MaterialCommunityIcons name="identifier" size={20} color="#4361EE" style={styles.inputIcon} />
           <TextInput
             style={styles.input}
-            placeholder="GSTIN Number"
+            placeholder="GSTIN Number *"
             value={gstin}
             onChangeText={setGstin}
             placeholderTextColor="#999"
@@ -501,13 +568,15 @@ export default function BusinessUploadScreen() {
           <MaterialIcons name="store" size={20} color="#4361EE" style={styles.inputIcon} />
           <TextInput
             style={styles.input}
-            placeholder="Shop Address"
+            placeholder="Shop Address *"
             value={address}
             onChangeText={setAddress}
             placeholderTextColor="#999"
             multiline
           />
         </View>
+
+        <Text style={styles.requiredFieldsNote}>* All fields are required</Text>
       </View>
     );
   };
@@ -521,7 +590,7 @@ export default function BusinessUploadScreen() {
         </View>
 
         <Text style={styles.sectionDescription}>
-          Select all categories that apply to your business
+          Select all categories that apply to your business *
         </Text>
 
         <View style={styles.categoriesGrid}>
@@ -553,6 +622,8 @@ export default function BusinessUploadScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        <Text style={styles.requiredFieldsNote}>* At least one category must be selected</Text>
       </View>
     );
   };
@@ -566,13 +637,13 @@ export default function BusinessUploadScreen() {
         </View>
 
         <Text style={styles.sectionDescription}>
-          Upload your personal identification documents
+          Upload your personal identification documents *
         </Text>
 
         <View style={styles.documentCard}>
           <View style={styles.documentHeader}>
             <MaterialCommunityIcons name="card-account-details" size={24} color="#4361EE" />
-            <Text style={styles.documentTitle}>Aadhar Card</Text>
+            <Text style={styles.documentTitle}>Aadhar Card *</Text>
           </View>
           <TouchableOpacity
             style={[styles.documentUpload, aadharUri && styles.documentUploaded]}
@@ -598,7 +669,7 @@ export default function BusinessUploadScreen() {
         <View style={styles.documentCard}>
           <View style={styles.documentHeader}>
             <MaterialCommunityIcons name="card-bulleted" size={24} color="#4361EE" />
-            <Text style={styles.documentTitle}>PAN Card</Text>
+            <Text style={styles.documentTitle}>PAN Card *</Text>
           </View>
           <TouchableOpacity
             style={[styles.documentUpload, panUri && styles.documentUploaded]}
@@ -624,7 +695,7 @@ export default function BusinessUploadScreen() {
         <View style={styles.documentCard}>
           <View style={styles.documentHeader}>
             <MaterialCommunityIcons name="face-recognition" size={24} color="#4361EE" />
-            <Text style={styles.documentTitle}>Live Selfie</Text>
+            <Text style={styles.documentTitle}>Live Selfie *</Text>
           </View>
           <TouchableOpacity
             style={[styles.documentUpload, selfieUri && styles.documentUploaded]}
@@ -650,7 +721,7 @@ export default function BusinessUploadScreen() {
         <View style={styles.documentCard}>
           <View style={styles.documentHeader}>
             <MaterialCommunityIcons name="video" size={24} color="#4361EE" />
-            <Text style={styles.documentTitle}>Verification Video</Text>
+            <Text style={styles.documentTitle}>Verification Video *</Text>
           </View>
           <TouchableOpacity
             style={[styles.documentUpload, videoUri && styles.documentUploaded]}
@@ -673,10 +744,13 @@ export default function BusinessUploadScreen() {
               <>
                 <MaterialCommunityIcons name="video-plus" size={40} color="#4361EE" />
                 <Text style={styles.documentUploadText}>Record Live Video</Text>
+                <Text style={styles.videoDurationNote}>(Max 30 minute)</Text>
               </>
             )}
           </TouchableOpacity>
         </View>
+
+        <Text style={styles.requiredFieldsNote}>* All documents are required</Text>
       </View>
     );
   };
@@ -690,13 +764,13 @@ export default function BusinessUploadScreen() {
         </View>
 
         <Text style={styles.sectionDescription}>
-          Upload your shop images and videos
+          Upload your shop images and videos *
         </Text>
 
         <View style={styles.documentCard}>
           <View style={styles.documentHeader}>
             <MaterialCommunityIcons name="storefront" size={24} color="#4361EE" />
-            <Text style={styles.documentTitle}>Shop Image</Text>
+            <Text style={styles.documentTitle}>Shop Image *</Text>
           </View>
           <TouchableOpacity
             style={[styles.documentUpload, shopImageUri && styles.documentUploaded]}
@@ -722,7 +796,7 @@ export default function BusinessUploadScreen() {
         <View style={styles.documentCard}>
           <View style={styles.documentHeader}>
             <MaterialCommunityIcons name="video-box" size={24} color="#4361EE" />
-            <Text style={styles.documentTitle}>Shop Video</Text>
+            <Text style={styles.documentTitle}>Shop Video *</Text>
           </View>
           <TouchableOpacity
             style={[styles.documentUpload, shopVideoUri && styles.documentUploaded]}
@@ -749,6 +823,8 @@ export default function BusinessUploadScreen() {
             )}
           </TouchableOpacity>
         </View>
+
+        <Text style={styles.requiredFieldsNote}>* All documents are required</Text>
       </View>
     );
   };
@@ -824,6 +900,50 @@ export default function BusinessUploadScreen() {
   };
 
   const renderNavButtons = () => {
+    const validateCurrentSection = () => {
+      const missingFields = [];
+
+      switch (currentSection) {
+        case 0: // Basic Information
+          if (!phone || phone.length !== 10) missingFields.push('Valid Phone Number');
+          if (!email || !email.includes('@')) missingFields.push('Valid Email');
+          if (!businessName) missingFields.push('Business Name');
+          if (!gstin) missingFields.push('GSTIN Number');
+          if (!address) missingFields.push('Shop Address');
+          break;
+        case 1: // Categories
+          if (categories.length === 0) missingFields.push('At least one Business Category');
+          break;
+        case 2: // Personal Documents
+          if (!aadharUri) missingFields.push('Aadhar Card');
+          if (!panUri) missingFields.push('PAN Card');
+          if (!selfieUri) missingFields.push('Selfie');
+          if (!videoUri) missingFields.push('Verification Video');
+          break;
+        case 3: // Business Documents
+          if (!shopImageUri) missingFields.push('Shop Image');
+          if (!shopVideoUri) missingFields.push('Shop Video');
+          break;
+      }
+
+      if (missingFields.length > 0) {
+        toast.error(`Please provide: ${missingFields.join(', ')}`);
+        return false;
+      }
+
+      return true;
+    };
+
+    const handleNextPress = () => {
+      if (validateCurrentSection()) {
+        if (currentSection === 3) {
+          // Send OTP when moving to OTP verification section
+          sendOtp();
+        }
+        setCurrentSection(prev => prev + 1);
+      }
+    };
+
     return (
       <View style={styles.navButtons}>
         {currentSection > 0 && (
@@ -839,15 +959,7 @@ export default function BusinessUploadScreen() {
         {currentSection < 4 ? (
           <TouchableOpacity
             style={styles.nextButton}
-            onPress={() => {
-              if (currentSection === 3) {
-                // Send OTP when moving to OTP verification section
-                toast.success('OTP sent to your phone number');
-                setCurrentSection(prev => prev + 1);
-              } else {
-                setCurrentSection(prev => prev + 1);
-              }
-            }}
+            onPress={handleNextPress}
           >
             <Text style={styles.nextButtonText}>
               {currentSection === 3 ? 'Send OTP' : 'Next'}
@@ -871,45 +983,47 @@ export default function BusinessUploadScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={{ flex: 1 }}
+    <LinearGradient
+      colors={["#FFE9A0", "#F6FFCD"]}
+      locations={[0.25, 0.5]}
+      style={{ flex: 1, height: '100%' }}
+
     >
-      <LinearGradient
-        colors={["#FFE9A0", "#F6FFCD"]}
-        locations={[0.25, 0.5]}
-        style={styles.background}
-      />
-
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButtonHeader}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Business Registration</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      <ScrollView
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1, }}
       >
-        <View style={styles.card}>
-          {renderProgressBar()}
-          {renderSection()}
-          {renderNavButtons()}
+
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButtonHeader}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#000" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Business Registration</Text>
+          <View style={{ width: 40 }} />
         </View>
 
-        <View style={styles.securityNote}>
-          <Feather name="shield" size={16} color="#4361EE" />
-          <Text style={styles.securityText}>
-            Your information is secure and encrypted
-          </Text>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.card}>
+            {renderProgressBar()}
+            {renderSection()}
+            {renderNavButtons()}
+          </View>
+
+          <View style={styles.securityNote}>
+            <Feather name="shield" size={16} color="#4361EE" />
+            <Text style={styles.securityText}>
+              Your information is secure and encrypted
+            </Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 
@@ -934,8 +1048,8 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     // backgroundColor: 'rgba(255,255,255,0.2)',
-    backgroundColor: '#ffffff',
-    opacity: 0.5,
+    backgroundColor: '#fff',
+    opacity: 0.8,
 
     // backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
@@ -1271,5 +1385,16 @@ const styles = StyleSheet.create({
   },
   submitButtonDisabled: {
     opacity: 0.6,
+  },
+  requiredFieldsNote: {
+    fontSize: 12,
+    color: '#FF5252',
+    marginTop: 10,
+    fontStyle: 'italic',
+  },
+  videoDurationNote: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 5,
   },
 });

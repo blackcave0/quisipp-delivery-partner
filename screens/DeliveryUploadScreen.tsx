@@ -97,6 +97,7 @@ export default function DeliveryUploadScreen() {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setUri(result.assets[0].uri);
+        toast.success('Image selected successfully');
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -116,12 +117,19 @@ export default function DeliveryUploadScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Videos,
         allowsEditing: false,
         quality: 1.0,
-        videoMaxDuration: 60,
+        videoMaxDuration: 30, // 30 seconds max
         presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
+        // Check video duration if possible
+        if (result.assets[0].duration && result.assets[0].duration > 30000) {
+          toast.error('Video must be less than 30 seconds long');
+          return;
+        }
+
         setVideoUri(result.assets[0].uri);
+        toast.success('Video selected successfully');
       }
     } catch (error) {
       console.error('Error picking video:', error);
@@ -150,6 +158,7 @@ export default function DeliveryUploadScreen() {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setSelfieUri(result.assets[0].uri);
+        toast.success('Selfie taken successfully');
       }
     } catch (error) {
       console.error('Error taking selfie:', error);
@@ -172,11 +181,18 @@ export default function DeliveryUploadScreen() {
         allowsEditing: true,
         quality: 1,
         mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-        videoMaxDuration: 30,
+        videoMaxDuration: 30, // 30 seconds max
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
+        // Check video duration if possible
+        if (result.assets[0].duration && result.assets[0].duration > 30000) {
+          toast.error('Video must be less than 30 seconds long');
+          return;
+        }
+
         setVideoUri(result.assets[0].uri);
+        toast.success('Video recorded successfully');
       }
     } catch (error) {
       console.error('Error recording video:', error);
@@ -341,6 +357,7 @@ export default function DeliveryUploadScreen() {
       return true;
     } catch (error) {
       console.error('Document upload error:', error);
+      toast.error('Failed to upload some documents. Please try again.');
       return false;
     }
   };
@@ -360,17 +377,37 @@ export default function DeliveryUploadScreen() {
         type: `${type === 'video' ? 'video' : 'image'}/${fileType}`
       });
 
-      await mediaService.uploadDocument(formData, 'delivery-partner', type);
+      const response = await mediaService.uploadDocument(formData, 'delivery-partner', type);
+
+      if (response && typeof response === 'object' && 'success' in response) {
+        toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} uploaded successfully`);
+      }
+
+      return response;
     } catch (error) {
       console.error(`Error uploading ${type}:`, error);
+      toast.error(`Failed to upload ${type}. Please try again.`);
       throw error;
     }
   };
 
   const handleSubmit = async () => {
-    // Basic validation
-    if (!phone || !email) {
-      toast.error('Please fill all required fields');
+    // Comprehensive validation for all required fields
+    const missingFields = [];
+
+    // Basic information validation
+    if (!phone || phone.length !== 10) missingFields.push('Valid Phone Number (10 digits)');
+    if (!email || !email.includes('@')) missingFields.push('Valid Email Address');
+
+    // Documents validation
+    if (!aadharUri) missingFields.push('Aadhar Card');
+    if (!panUri) missingFields.push('PAN Card');
+    if (!selfieUri) missingFields.push('Selfie');
+    if (!videoUri) missingFields.push('Verification Video');
+
+    // If any required fields are missing, show toast and return
+    if (missingFields.length > 0) {
+      toast.error(`Please provide: ${missingFields.join(', ')}`);
       return;
     }
 
@@ -386,15 +423,25 @@ export default function DeliveryUploadScreen() {
   const nextStep = () => {
     if (currentStep === 1) {
       // Validate personal info
-      if (!phone || !email) {
-        toast.error('Please fill all required fields');
+      if (!phone || phone.length !== 10) {
+        toast.error('Please enter a valid 10-digit phone number');
+        return;
+      }
+      if (!email || !email.includes('@')) {
+        toast.error('Please enter a valid email address');
         return;
       }
       setCurrentStep(2);
     } else if (currentStep === 2) {
       // Validate documents
-      if (!aadharUri || !panUri) {
-        toast.error('Please upload required documents');
+      const missingDocs = [];
+      if (!aadharUri) missingDocs.push('Aadhar Card');
+      if (!panUri) missingDocs.push('PAN Card');
+      if (!selfieUri) missingDocs.push('Selfie');
+      if (!videoUri) missingDocs.push('Verification Video');
+
+      if (missingDocs.length > 0) {
+        toast.error(`Please upload: ${missingDocs.join(', ')}`);
         return;
       }
       setCurrentStep(3);
@@ -417,8 +464,6 @@ export default function DeliveryUploadScreen() {
       navigation.goBack();
     }
   };
-
-
 
   return (
     <View style={styles.mainContainer}>
@@ -470,7 +515,7 @@ export default function DeliveryUploadScreen() {
               <Text style={styles.subtitle}>You selected: <Text style={styles.highlightText}>{type === 'part-time' ? 'Part-Time' : 'Full-Time'}</Text></Text>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Phone Number</Text>
+                <Text style={styles.label}>Phone Number *</Text>
                 <View style={styles.inputContainer}>
                   <Ionicons name="call-outline" size={20} color="#666" style={styles.inputIcon} />
                   <TextInput
@@ -479,12 +524,13 @@ export default function DeliveryUploadScreen() {
                     keyboardType="phone-pad"
                     value={phone}
                     onChangeText={setPhone}
+                    maxLength={10}
                   />
                 </View>
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Email Address</Text>
+                <Text style={styles.label}>Email Address *</Text>
                 <View style={styles.inputContainer}>
                   <Ionicons name="mail-outline" size={20} color="#666" style={styles.inputIcon} />
                   <TextInput
@@ -496,6 +542,8 @@ export default function DeliveryUploadScreen() {
                   />
                 </View>
               </View>
+
+              <Text style={styles.requiredFieldsNote}>* All fields are required</Text>
             </View>
           </View>
         ) : currentStep === 2 ? (
@@ -506,10 +554,10 @@ export default function DeliveryUploadScreen() {
                 <Text style={styles.cardTitle}>Document Verification</Text>
               </View>
 
-              <Text style={styles.subtitle}>Upload the required documents</Text>
+              <Text style={styles.subtitle}>Upload the required documents *</Text>
 
               <View style={styles.documentSection}>
-                <Text style={styles.documentTitle}>Aadhar Card</Text>
+                <Text style={styles.documentTitle}>Aadhar Card *</Text>
                 <TouchableOpacity
                   style={styles.uploadContainer}
                   onPress={() => pickImage(setAadharUri)}
@@ -534,7 +582,7 @@ export default function DeliveryUploadScreen() {
               </View>
 
               <View style={styles.documentSection}>
-                <Text style={styles.documentTitle}>PAN Card</Text>
+                <Text style={styles.documentTitle}>PAN Card *</Text>
                 <TouchableOpacity
                   style={styles.uploadContainer}
                   onPress={() => pickImage(setPanUri)}
@@ -559,7 +607,7 @@ export default function DeliveryUploadScreen() {
               </View>
 
               <View style={styles.documentSection}>
-                <Text style={styles.documentTitle}>Live Selfie</Text>
+                <Text style={styles.documentTitle}>Live Selfie *</Text>
                 <TouchableOpacity
                   style={[styles.uploadContainer, styles.selfieContainer]}
                   onPress={takeSelfie}
@@ -584,7 +632,7 @@ export default function DeliveryUploadScreen() {
               </View>
 
               <View style={styles.documentSection}>
-                <Text style={styles.documentTitle}>Verification Video</Text>
+                <Text style={styles.documentTitle}>Verification Video *</Text>
                 <TouchableOpacity
                   style={styles.uploadContainer}
                   onPress={recordVideo}
@@ -602,11 +650,14 @@ export default function DeliveryUploadScreen() {
                       <View style={styles.uploadOverlay}>
                         <Ionicons name="videocam-outline" size={32} color="#fff" />
                         <Text style={styles.uploadText}>Record Live Video</Text>
+                        <Text style={styles.videoDurationNote}>(Max 30 seconds)</Text>
                       </View>
                     </View>
                   )}
                 </TouchableOpacity>
               </View>
+
+              <Text style={styles.requiredFieldsNote}>* All documents are required</Text>
             </View>
           </View>
         ) : (
@@ -739,7 +790,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    // backgroundColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: '#fff',
+    opacity: 0.8,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
@@ -1058,5 +1111,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-
+  requiredFieldsNote: {
+    fontSize: 12,
+    color: '#FF5252',
+    marginTop: 10,
+    fontStyle: 'italic',
+  },
+  videoDurationNote: {
+    fontSize: 12,
+    color: '#fff',
+    marginTop: 5,
+  },
 });

@@ -107,7 +107,7 @@ const SelectVehicle = ({ navigation }: { navigation: any }) => {
         className="absolute inset-0"
       />
       <View className="w-full items-center pt-[60px] px-5 mb-5">
-        <TouchableOpacity className="absolute left-5 top-[60px] w-10 h-10 rounded-full bg-white/80 justify-center items-center" onPress={() => navigation.goBack()}>
+        <TouchableOpacity className="absolute left-5 top-[60px] w-12 h-12 rounded-full bg-white/80 justify-center items-center" onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
         <Text className="text-[28px]  text-black text-center mt-2" style={{ fontFamily: 'Inter_700Bold' }}>Select Your Vehicle</Text>
