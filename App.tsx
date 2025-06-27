@@ -1,6 +1,6 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, useColorScheme } from 'react-native';
 import { SafeAreaProvider } from "react-native-safe-area-context"
 import { Toaster } from 'sonner-native';
 import { useEffect } from 'react';
@@ -82,7 +82,7 @@ function AppWithAuth() {
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1, }}>
-      <StatusBar style={'auto'} />
+      <StatusBar style={useColorScheme() === 'dark' ? 'light' : 'dark'} />
       <SafeAreaProvider style={styles.container}>
         <Toaster />
         <AuthProvider>
