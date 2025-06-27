@@ -74,6 +74,8 @@ function AppWithAuth() {
 
   return (
     <NavigationContainer>
+      {/* Always use light content for status bar in dark mode */}
+      <StatusBar style="dark" />
       <RootStack />
     </NavigationContainer>
   );
@@ -81,8 +83,7 @@ function AppWithAuth() {
 
 export default function App() {
   return (
-    <GestureHandlerRootView style={{ flex: 1, }}>
-      <StatusBar style={useColorScheme() === 'dark' ? 'light' : 'dark'} />
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider style={styles.container}>
         <Toaster />
         <AuthProvider>

@@ -39,7 +39,10 @@
     "react-native-svg": "15.11.2",
     "react-native-web": "~0.20.0",
     "sonner-native": "^0.21.0",
-    "expo-status-bar": "~2.2.3"
+    "expo-status-bar": "~2.2.3",
+    "expo-dev-client": "~5.2.1",
+    "expo-updates": "~0.28.15",
+    "expo-system-ui": "~5.0.9"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
