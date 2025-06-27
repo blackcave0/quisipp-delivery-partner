@@ -17,6 +17,7 @@ import HomeScreen from './screens/HomeScreen';
 import { requestAllPermissions } from './utils/permissions';
 import { initializeNotifications } from './utils/notificationExamples';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { StatusBar } from 'expo-status-bar';
 
 const Stack = createNativeStackNavigator();
 
@@ -37,6 +38,7 @@ function RootStack() {
       initialRouteName={isAuthenticated ? "HomeScreen" : "Splash"}
       screenOptions={{ headerShown: false }}
     >
+
       {isAuthenticated ? (
         // Authenticated routes
         <>
@@ -79,7 +81,8 @@ function AppWithAuth() {
 
 export default function App() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, }}>
+      <StatusBar style={'auto'} />
       <SafeAreaProvider style={styles.container}>
         <Toaster />
         <AuthProvider>

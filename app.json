@@ -28,13 +28,14 @@
         "backgroundColor": "#ffffff"
       },
       "permissions": [
-        "CAMERA",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "NOTIFICATIONS"
-      ]
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.quisipp.partner"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -42,9 +43,25 @@
     "description": "Quisipp Delivery Partner : Register as a delivery partner and start earning money by delivering packages and food",
     "plugins": [
       "expo-font",
-      "expo-location",
-      "expo-camera",
-      "expo-media-library",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to access your location for tracking deliveries."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to take photos of deliveries."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos for delivery proof.",
+          "savePhotosPermission": "Allow $(PRODUCT_NAME) to save delivery photos to your library."
+        }
+      ],
       [
         "expo-notifications",
         {
@@ -54,11 +71,10 @@
         }
       ]
     ],
-    "permissions": [
-      "location",
-      "camera",
-      "mediaLibrary",
-      "notifications"
-    ]
+    "extra": {
+      "eas": {
+        "projectId": "436ce231-8eff-46b1-98f4-415c493f51a8"
+      }
+    }
   }
 }
