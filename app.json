@@ -1,8 +1,7 @@
 {
   "expo": {
-    "name": "quisipp-delivery-partner",
-    "slug": "snack-0c55024b-e90e-4d50-bb29-c5fc086f8079",
-    "version": "1.0.0",
+    "name": "Quisipp Partner",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "dark",
@@ -72,16 +71,10 @@
         }
       ]
     ],
-    "extra": {
-      "eas": {
-        "projectId": "436ce231-8eff-46b1-98f4-415c493f51a8"
-      }
-    },
+   
     "runtimeVersion": {
       "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/436ce231-8eff-46b1-98f4-415c493f51a8"
     }
+    
   }
 }

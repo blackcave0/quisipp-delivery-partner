@@ -58,6 +58,7 @@ export default function BusinessUploadScreen() {
   const [email, setEmail] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [businessType, setBusinessType] = useState('');
+  const [hasGstin, setHasGstin] = useState(false);
   const [aadharUri, setAadharUri] = useState<string | null>(null);
   const [panUri, setPanUri] = useState<string | null>(null);
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
@@ -140,7 +141,7 @@ export default function BusinessUploadScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Videos,
         allowsEditing: false,
         quality: 1.0,
-        videoMaxDuration: 30, // 1 minute max
+        videoMaxDuration: 60, // 1 minute max
         presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN
       });
 
@@ -340,7 +341,7 @@ export default function BusinessUploadScreen() {
         phoneNumber: phone,
         businessName,
         businessType: businessType || categories.join(','),
-        gstin,
+        ...(hasGstin && gstin ? { gstin } : {}),
         businessAddress: address,
         pincode
       };
@@ -440,7 +441,7 @@ export default function BusinessUploadScreen() {
     if (!phone || phone.length !== 10) missingFields.push('Valid Phone Number (10 digits)');
     if (!email || !email.includes('@')) missingFields.push('Valid Email Address');
     if (!businessName) missingFields.push('Business Name');
-    if (!gstin) missingFields.push('GSTIN Number');
+    if (hasGstin && !gstin) missingFields.push('GSTIN Number');
     if (!address) missingFields.push('Shop Address');
     if (!pincode) missingFields.push('Pincode');
 
@@ -562,16 +563,28 @@ export default function BusinessUploadScreen() {
           />
         </View>
 
-        <View style={styles.inputContainer}>
-          <MaterialCommunityIcons name="identifier" size={20} color="#4361EE" style={styles.inputIcon} />
-          <TextInput
-            style={styles.input}
-            placeholder="GSTIN Number *"
-            value={gstin}
-            onChangeText={setGstin}
-            placeholderTextColor="#999"
-          />
-        </View>
+        <TouchableOpacity
+          style={styles.checkboxContainer}
+          onPress={() => setHasGstin(!hasGstin)}
+        >
+          <View style={[styles.checkbox, hasGstin && styles.checkboxChecked]}>
+            {hasGstin && <Ionicons name="checkmark" size={16} color="#fff" />}
+          </View>
+          <Text style={styles.checkboxLabel}>Do you have GSTIN number?</Text>
+        </TouchableOpacity>
+
+        {hasGstin && (
+          <View style={styles.inputContainer}>
+            <MaterialCommunityIcons name="identifier" size={20} color="#4361EE" style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="GSTIN Number *"
+              value={gstin}
+              onChangeText={setGstin}
+              placeholderTextColor="#999"
+            />
+          </View>
+        )}
 
         <View style={styles.inputContainer}>
           <MaterialIcons name="store" size={20} color="#4361EE" style={styles.inputIcon} />
@@ -779,7 +792,7 @@ export default function BusinessUploadScreen() {
               <>
                 <MaterialCommunityIcons name="video-plus" size={40} color="#4361EE" />
                 <Text style={styles.documentUploadText}>Record Live Video</Text>
-                <Text style={styles.videoDurationNote}>(Max 30 minute)</Text>
+                <Text style={styles.videoDurationNote}>(Max 1 minute)</Text>
               </>
             )}
           </TouchableOpacity>
@@ -943,7 +956,7 @@ export default function BusinessUploadScreen() {
           if (!phone || phone.length !== 10) missingFields.push('Valid Phone Number');
           if (!email || !email.includes('@')) missingFields.push('Valid Email');
           if (!businessName) missingFields.push('Business Name');
-          if (!gstin) missingFields.push('GSTIN Number');
+          if (hasGstin && !gstin) missingFields.push('GSTIN Number');
           if (!address) missingFields.push('Shop Address');
           if (!pincode) missingFields.push('Pincode');
           break;
@@ -1022,7 +1035,7 @@ export default function BusinessUploadScreen() {
     <LinearGradient
       colors={["#FFE9A0", "#F6FFCD"]}
       locations={[0.25, 0.5]}
-      style={{ flex: 1, height: '100%' }}
+      style={{ flex: 1, height: '100%', }}
 
     >
       <KeyboardAvoidingView
@@ -1153,6 +1166,7 @@ const styles = StyleSheet.create({
   },
   sectionContainer: {
     marginBottom: 20,
+    
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -1432,5 +1446,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999',
     marginTop: 5,
+  },
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+    paddingHorizontal: 10,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#4361EE',
+    marginRight: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  checkboxChecked: {
+    backgroundColor: '#4361EE',
+  },
+  checkboxLabel: {
+    fontSize: 16,
+    color: '#333',
   },
 });
