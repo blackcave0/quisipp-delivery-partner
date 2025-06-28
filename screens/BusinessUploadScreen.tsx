@@ -76,6 +76,9 @@ export default function BusinessUploadScreen() {
   const [otpSent, setOtpSent] = useState(false);
   const otpRefs = useRef<TextInput[]>([]);
 
+  // pincode
+  const [pincode, setPincode] = useState('');
+
   // Load stored data if available
   useEffect(() => {
     const loadStoredData = async () => {
@@ -172,6 +175,7 @@ export default function BusinessUploadScreen() {
         quality: 1,
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         aspect: [1, 1],
+        presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -197,6 +201,7 @@ export default function BusinessUploadScreen() {
         quality: 1,
         mediaTypes: ImagePicker.MediaTypeOptions.Videos,
         videoMaxDuration: 60, // 1 minute max
+        presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -334,7 +339,10 @@ export default function BusinessUploadScreen() {
         email,
         phoneNumber: phone,
         businessName,
-        businessType: businessType || categories.join(',')
+        businessType: businessType || categories.join(','),
+        gstin,
+        businessAddress: address,
+        pincode
       };
 
       await businessOwnerService.registerBusinessOwner(registrationData);
@@ -434,6 +442,7 @@ export default function BusinessUploadScreen() {
     if (!businessName) missingFields.push('Business Name');
     if (!gstin) missingFields.push('GSTIN Number');
     if (!address) missingFields.push('Shop Address');
+    if (!pincode) missingFields.push('Pincode');
 
     // Categories validation
     if (categories.length === 0) missingFields.push('At least one Business Category');
@@ -576,6 +585,19 @@ export default function BusinessUploadScreen() {
           />
         </View>
 
+        <View style={styles.inputContainer}>
+          <MaterialIcons name="location-on" size={20} color="#4361EE" style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Pincode *"
+            value={pincode}
+            keyboardType="phone-pad"
+            maxLength={6}
+            onChangeText={setPincode}
+            placeholderTextColor="#999"
+          />
+        </View>
+
         <Text style={styles.requiredFieldsNote}>* All fields are required</Text>
       </View>
     );
@@ -594,33 +616,46 @@ export default function BusinessUploadScreen() {
         </Text>
 
         <View style={styles.categoriesGrid}>
-          {categoriesList.map(cat => (
-            <TouchableOpacity
-              key={cat.id}
-              style={[
-                styles.categoryCard,
-                categories.includes(cat.id) && styles.categoryCardSelected
-              ]}
-              onPress={() => toggleCategory(cat.id)}
-            >
-              <View style={[
-                styles.categoryIconContainer,
-                categories.includes(cat.id) && styles.categoryIconContainerSelected
-              ]}>
-                <MaterialCommunityIcons
-                  name={cat.icon as any}
-                  size={24}
-                  color={categories.includes(cat.id) ? "#fff" : "#4361EE"}
-                />
-              </View>
-              <Text style={[
-                styles.categoryText,
-                categories.includes(cat.id) && styles.categoryTextSelected
-              ]}>
-                {cat.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {categoriesList.map(cat => {
+            const isEnabled = cat.id === 'food' || cat.id === 'groceries';
+            return (
+              <TouchableOpacity
+                key={cat.id}
+                style={[
+                  styles.categoryCard,
+                  categories.includes(cat.id) && isEnabled && styles.categoryCardSelected,
+                  !isEnabled && { opacity: 0.5 }
+                ]}
+                onPress={() => {
+                  if (isEnabled) {
+                    toggleCategory(cat.id);
+                  }
+                }}
+                activeOpacity={isEnabled ? 0.7 : 1}
+                disabled={!isEnabled}
+              >
+                <View style={[
+                  styles.categoryIconContainer,
+                  categories.includes(cat.id) && isEnabled && styles.categoryIconContainerSelected
+                ]}>
+                  <MaterialCommunityIcons
+                    name={cat.icon as any}
+                    size={24}
+                    color={categories.includes(cat.id) && isEnabled ? "#fff" : "#4361EE"}
+                  />
+                </View>
+                <Text style={[
+                  styles.categoryText,
+                  categories.includes(cat.id) && isEnabled && styles.categoryTextSelected
+                ]}>
+                  {cat.name}
+                </Text>
+                {!isEnabled && (
+                  <Text style={{ fontSize: 10, color: '#999', marginTop: 4 }}>Coming Soon</Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         <Text style={styles.requiredFieldsNote}>* At least one category must be selected</Text>
@@ -910,6 +945,7 @@ export default function BusinessUploadScreen() {
           if (!businessName) missingFields.push('Business Name');
           if (!gstin) missingFields.push('GSTIN Number');
           if (!address) missingFields.push('Shop Address');
+          if (!pincode) missingFields.push('Pincode');
           break;
         case 1: // Categories
           if (categories.length === 0) missingFields.push('At least one Business Category');

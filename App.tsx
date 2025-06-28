@@ -1,6 +1,6 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { StyleSheet, useColorScheme } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from "react-native-safe-area-context"
 import { Toaster } from 'sonner-native';
 import { useEffect } from 'react';
@@ -14,6 +14,7 @@ import SelectVehicle from './screens/SelectVehicle';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ThankYouScreen from './screens/ThankYouScreen';
 import HomeScreen from './screens/HomeScreen';
+import HelpCenterScreen from './screens/HelpCenterScreen';
 import { requestAllPermissions } from './utils/permissions';
 import { initializeNotifications } from './utils/notificationExamples';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -22,7 +23,7 @@ import { StatusBar } from 'expo-status-bar';
 const Stack = createNativeStackNavigator();
 
 function RootStack() {
-  const { isAuthenticated, isLoading } = useAuth();
+    const { isAuthenticated, isLoading } = useAuth();
 
   // Show splash screen while checking authentication
   if (isLoading) {
@@ -43,6 +44,7 @@ function RootStack() {
         // Authenticated routes
         <>
           <Stack.Screen name="HomeScreen" component={HomeScreen} />
+          <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
         </>
       ) : (
         // Unauthenticated routes
@@ -54,7 +56,8 @@ function RootStack() {
           <Stack.Screen name="BusinessUpload" component={BusinessUploadScreen} />
           <Stack.Screen name="SelectVehicle" component={SelectVehicle} />
           <Stack.Screen name="ThankYou" component={ThankYouScreen} />
-          <Stack.Screen name="HomeScreen" component={HomeScreen} />
+          {/* <Stack.Screen name="HomeScreen" component={HomeScreen} /> */}
+          <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
         </>
       )}
     </Stack.Navigator>

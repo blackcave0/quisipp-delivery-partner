@@ -7,6 +7,7 @@ import api from "./api";
  * @param {string} businessData.phoneNumber - Business owner's phone number
  * @param {string} businessData.businessName - Business name
  * @param {string} businessData.businessType - Business type
+ * @param {string} businessData.pincode - Business pincode
  * @returns {Promise<Object>} Registration response
  */
 export const registerBusinessOwner = async (businessData) => {
@@ -55,6 +56,7 @@ export const updateProfile = async (profileData) => {
  * @param {string} businessDetails.businessCity - Business city
  * @param {string} businessDetails.businessState - Business state
  * @param {string} businessDetails.businessPincode - Business pincode
+ * @param {string} businessDetails.pincode - Business pincode
  * @returns {Promise<Object>} Update response
  */
 export const updateBusinessDetails = async (businessDetails) => {

@@ -5,6 +5,7 @@ import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-ico
 import { useAuth } from '../contexts/AuthContext';
 import { deliveryPartnerService, businessOwnerService } from '../services';
 import { useFonts, Lato_400Regular, Lato_700Bold, Inter_400Regular, Inter_700Bold } from '@expo-google-fonts/dev';
+import { useNavigation } from '@react-navigation/native';
 
 // Define response type
 interface ApiResponse {
@@ -13,10 +14,37 @@ interface ApiResponse {
   data: any;
 }
 
-export default function HomeScreen({ navigation }: { navigation: any }) {
+export default function HomeScreen() {
   const { user, logout } = useAuth();
+  // const { user, logout } = { user: { role: 'delivery-partner', profile: { firstName: 'John', lastName: 'Doe', phoneNumber: '1234567890', email: 'john.doe@example.com', profilePicture: { url: 'https://via.placeholder.com/150' } } }, logout: () => { } };
+
+  // const user = {
+  //   role: 'delivery-partner',
+  //   profile: { firstName: 'John', lastName: 'Doe', phoneNumber: '1234567890', email: 'john.doe@example.com', profilePicture: { url: 'https://via.placeholder.com/150' } },
+  //   deliveryPartnerDetails: { vehicleType: 'motorcycle', employmentType: 'full-time', isActive: true },
+  //   businessOwnerDetails: { businessName: 'ABC Inc', businessType: 'Retail', businessAddress: '123 Main St', businessImages: ['https://via.placeholder.com/150', 'https://via.placeholder.com/150'], businessVideo: 'https://via.placeholder.com/150' },
+  //   documents: { aadhar: true, pan: true, selfie: true, video: true },
+  //   phoneNumber: '1234567890',
+  //   email: 'john.doe@example.com'
+  // };
+
+  // const logout = () => {
+  //   console.log('Logout');
+  // };
+
+  // const deliveryPartnerService = {
+  //   getProfile: () => {
+  //     return { success: true, data: user };
+  //   },
+  //   toggleActiveStatus: () => {
+  //     return { success: true };
+  //   }
+  // };
+  
+  
+
+  const navigation = useNavigation();
   const [loading, setLoading] = useState(false);
-  const [profileData, setProfileData] = useState<any>(null);
 
   let [fontsLoaded] = useFonts({
     Lato_400Regular,
@@ -36,12 +64,14 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
       if (user?.role === 'delivery-partner') {
         const response = await deliveryPartnerService.getProfile() as ApiResponse;
         if (response.success) {
-          setProfileData(response.data);
+          // Profile data is already available in user context
+          console.log('Profile fetched successfully');
         }
       } else if (user?.role === 'business-owner') {
         const response = await businessOwnerService.getProfile() as ApiResponse;
         if (response.success) {
-          setProfileData(response.data);
+          // Profile data is already available in user context
+          console.log('Profile fetched successfully');
         }
       }
     } catch (error) {
@@ -55,13 +85,17 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     try {
       setLoading(true);
       await logout();
-      navigation.replace('Splash');
+      // Navigation will be handled by the auth context
     } catch (error) {
       console.error('Logout error:', error);
       Alert.alert('Error', 'Failed to logout. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleHelpCenter = () => {
+    (navigation as any).navigate('HelpCenter');
   };
 
   if (!fontsLoaded) {
@@ -79,13 +113,21 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             {user?.role === 'delivery-partner' ? 'Delivery Partner' : 'Business Owner'}
           </Text>
         </View>
-        <TouchableOpacity
-          style={styles.logoutButton}
-          onPress={handleLogout}
-          disabled={loading}
-        >
-          <Ionicons name="log-out-outline" size={24} color="#FF5A5F" />
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={styles.helpButton}
+            onPress={handleHelpCenter}
+          >
+            <MaterialCommunityIcons name="help-circle-outline" size={24} color="#4361EE" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={handleLogout}
+            disabled={loading}
+          >
+            <Ionicons name="log-out-outline" size={24} color="#FF5A5F" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (
@@ -324,6 +366,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666666',
     marginTop: 2,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  helpButton: {
+    padding: 8,
+    marginRight: 8,
   },
   logoutButton: {
     padding: 8,

@@ -154,6 +154,7 @@ export default function DeliveryUploadScreen() {
         quality: 1,
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         aspect: [1, 1],
+        presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -182,6 +183,7 @@ export default function DeliveryUploadScreen() {
         quality: 1,
         mediaTypes: ImagePicker.MediaTypeOptions.Videos,
         videoMaxDuration: 30, // 30 seconds max
+        presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
