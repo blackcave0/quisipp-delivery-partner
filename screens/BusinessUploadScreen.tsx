@@ -1166,7 +1166,7 @@ const styles = StyleSheet.create({
   },
   sectionContainer: {
     marginBottom: 20,
-    
+
   },
   sectionHeader: {
     flexDirection: 'row',

@@ -48,28 +48,45 @@ export const uploadDocument = async (formData, userType, documentType) => {
 };
 
 /**
- * Get media by ID
- * @param {string} mediaId - Media ID
- * @returns {Promise<Object>} Media data
+ * Upload document publicly (for registration without authentication)
+ * @param {FormData} formData - Form data with file and metadata
+ * @param {string} userType - User type (delivery-partner or business-owner)
+ * @param {string} documentType - Document type (aadhar, pan, selfie, video, business-image, business-video, profile-picture)
+ * @returns {Promise<Object>} Upload response
  */
-export const getMediaById = async (mediaId) => {
+export const uploadDocumentPublic = async (
+  formData,
+  userType,
+  documentType
+) => {
   try {
-    const response = await api.get(`/media/${mediaId}`);
+    const response = await api.post(
+      `/media/upload-document-public/${userType}/${documentType}`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
     return response.data;
   } catch (error) {
-    console.error("Get media error:", error.response?.data || error.message);
+    console.error(
+      "Public document upload error:",
+      error.response?.data || error.message
+    );
     throw error;
   }
 };
 
 /**
- * Delete media
- * @param {string} mediaId - Media ID
+ * Delete media by type
+ * @param {string} type - Document type (aadhar, pan, selfie, video, etc.)
  * @returns {Promise<Object>} Delete response
  */
-export const deleteMedia = async (mediaId) => {
+export const deleteMedia = async (type) => {
   try {
-    const response = await api.delete(`/media/${mediaId}`);
+    const response = await api.delete(`/media/${type}`);
     return response.data;
   } catch (error) {
     console.error("Delete media error:", error.response?.data || error.message);
@@ -83,7 +100,7 @@ export const deleteMedia = async (mediaId) => {
  */
 export const getAllUserMedia = async () => {
   try {
-    const response = await api.get("/media/user");
+    const response = await api.get("/media");
     return response.data;
   } catch (error) {
     console.error(
@@ -102,7 +119,7 @@ export const getAllUserMedia = async () => {
  */
 export const getUserMediaByType = async (category, type) => {
   try {
-    const response = await api.get(`/media/user/${category}/${type}`);
+    const response = await api.get(`/media/${category}/${type}`);
     return response.data;
   } catch (error) {
     console.error(

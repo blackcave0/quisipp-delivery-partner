@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, ActivityIndicator, Alert, Dimensions, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
 import { deliveryPartnerService, businessOwnerService } from '../services';
 import { useFonts, Lato_400Regular, Lato_700Bold, Inter_400Regular, Inter_700Bold } from '@expo-google-fonts/dev';
 import { useNavigation } from '@react-navigation/native';
+// import Video from 'react-native-video';
+import { ResizeMode, Video } from 'expo-av';
 
 // Define response type
 interface ApiResponse {
@@ -13,6 +15,8 @@ interface ApiResponse {
   message?: string;
   data: any;
 }
+
+const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const { user, logout } = useAuth();
@@ -40,11 +44,14 @@ export default function HomeScreen() {
   //     return { success: true };
   //   }
   // };
-  
-  
+
+
 
   const navigation = useNavigation();
   const [loading, setLoading] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [videoModalVisible, setVideoModalVisible] = useState(false);
+  const [currentVideoUrl, setCurrentVideoUrl] = useState<string | null>(null);
 
   let [fontsLoaded] = useFonts({
     Lato_400Regular,
@@ -64,14 +71,14 @@ export default function HomeScreen() {
       if (user?.role === 'delivery-partner') {
         const response = await deliveryPartnerService.getProfile() as ApiResponse;
         if (response.success) {
-          // Profile data is already available in user context
-          console.log('Profile fetched successfully');
+          setUserProfile(response.data);
+          console.log('Profile fetched successfully:', response.data);
         }
       } else if (user?.role === 'business-owner') {
         const response = await businessOwnerService.getProfile() as ApiResponse;
         if (response.success) {
-          // Profile data is already available in user context
-          console.log('Profile fetched successfully');
+          setUserProfile(response.data);
+          console.log('Profile fetched successfully:', response.data);
         }
       }
     } catch (error) {
@@ -98,6 +105,78 @@ export default function HomeScreen() {
     (navigation as any).navigate('HelpCenter');
   };
 
+  // Use userProfile as the main user object
+  const displayUser = userProfile || {};
+  console.log(displayUser)
+
+  // Helper function to get display name (use email or phone if no name)
+  const getDisplayName = () => {
+    if (displayUser.email) return displayUser.email;
+    if (displayUser.phoneNumber) return displayUser.phoneNumber;
+    return 'Delivery Partner';
+  };
+
+  // Helper function to get profile initial (use first letter of email or phone)
+  const getProfileInitial = () => {
+    if (displayUser.email) return displayUser.email[0].toUpperCase();
+    if (displayUser.phoneNumber) return displayUser.phoneNumber[0];
+    return 'U';
+  };
+
+  // Helper function to get profile picture (if available)
+  const getProfilePicture = () => {
+    return displayUser?.profile?.profilePicture?.url || null;
+  };
+
+  // Helper for document status
+  const getDocStatusIcon = (exists: boolean) =>
+    exists ? (
+      <Ionicons name="checkmark-circle" size={20} color="#4CC9F0" />
+    ) : (
+      <Ionicons name="close-circle" size={20} color="#FF5A5F" />
+    );
+
+  // Helper for document image
+  const renderDocumentImage = (label: string, imageUrl?: string) => {
+    if (!imageUrl) {
+      return (
+        <View style={styles.documentImagePlaceholder}>
+          <Ionicons name="image-outline" size={24} color="#CCCCCC" />
+          <Text style={styles.documentImageText}>No {label}</Text>
+        </View>
+      );
+    }
+    return (
+      <Image source={{ uri: imageUrl }} style={styles.documentImage} resizeMode="cover" />
+    );
+  };
+
+  // Helper for document video
+  const renderDocumentVideo = (videoUrl?: string) => {
+    if (!videoUrl) {
+      return (
+        <View style={styles.documentImagePlaceholder}>
+          <Ionicons name="videocam-outline" size={24} color="#CCCCCC" />
+          <Text style={styles.documentImageText}>No Video</Text>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.videoContainer}>
+        <Image source={{ uri: videoUrl }} style={styles.documentImage} resizeMode="cover" />
+        <TouchableOpacity
+          style={styles.videoPlayButton}
+          onPress={() => {
+            setCurrentVideoUrl(videoUrl);
+            setVideoModalVisible(true);
+          }}
+        >
+          <Ionicons name="play" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   if (!fontsLoaded) {
     return null;
   }
@@ -106,25 +185,14 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View>
-          <Text style={[styles.welcomeText, { fontFamily: 'Inter_700Bold' }]}>
-            Welcome, {user?.profile?.firstName || 'User'}!
-          </Text>
-          <Text style={[styles.roleText, { fontFamily: 'Lato_400Regular' }]}>
-            {user?.role === 'delivery-partner' ? 'Delivery Partner' : 'Business Owner'}
-          </Text>
+          <Text style={[styles.welcomeText, { fontFamily: 'Inter_700Bold' }]}>Welcome, {getDisplayName()}!</Text>
+          <Text style={[styles.roleText, { fontFamily: 'Lato_400Regular' }]}>{displayUser?.role === 'delivery-partner' ? 'Delivery Partner' : (displayUser?.role || 'User')}</Text>
         </View>
         <View style={styles.headerButtons}>
-          <TouchableOpacity
-            style={styles.helpButton}
-            onPress={handleHelpCenter}
-          >
+          <TouchableOpacity style={styles.helpButton} onPress={handleHelpCenter}>
             <MaterialCommunityIcons name="help-circle-outline" size={24} color="#4361EE" />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.logoutButton}
-            onPress={handleLogout}
-            disabled={loading}
-          >
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} disabled={loading}>
             <Ionicons name="log-out-outline" size={24} color="#FF5A5F" />
           </TouchableOpacity>
         </View>
@@ -135,134 +203,52 @@ export default function HomeScreen() {
           <ActivityIndicator size="large" color="#4361EE" />
         </View>
       ) : (
-        <ScrollView
-          style={styles.content}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           {/* Profile Card */}
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Text style={[styles.cardTitle, { fontFamily: 'Inter_700Bold' }]}>Profile</Text>
-              <TouchableOpacity style={styles.editButton}>
-                <Ionicons name="pencil" size={18} color="#4361EE" />
-              </TouchableOpacity>
             </View>
-
             <View style={styles.profileInfo}>
               <View style={styles.profileImageContainer}>
-                {user?.profile?.profilePicture?.url ? (
-                  <Image
-                    source={{ uri: user.profile.profilePicture.url }}
-                    style={styles.profileImage}
-                  />
+                {getProfilePicture() ? (
+                  <Image source={{ uri: getProfilePicture() }} style={styles.profileImage} />
                 ) : (
                   <View style={styles.profileImagePlaceholder}>
-                    <Text style={styles.profileInitial}>
-                      {(user?.profile?.firstName?.[0] || 'U').toUpperCase()}
-                    </Text>
+                    <Text style={styles.profileInitial}>{getProfileInitial()}</Text>
                   </View>
                 )}
               </View>
-
               <View style={styles.profileDetails}>
-                <Text style={[styles.profileName, { fontFamily: 'Inter_700Bold' }]}>
-                  {`${user?.profile?.firstName || ''} ${user?.profile?.lastName || ''}`}
-                </Text>
-                <Text style={[styles.profileContact, { fontFamily: 'Lato_400Regular' }]}>
-                  {user?.phoneNumber}
-                </Text>
-                <Text style={[styles.profileContact, { fontFamily: 'Lato_400Regular' }]}>
-                  {user?.email}
-                </Text>
+                <View style={styles.nameRow}>
+                  <Text style={[styles.profileName, { fontFamily: 'Inter_700Bold' }]}>{getDisplayName()}</Text>
+                  {displayUser.isVerified && (
+                    <View style={styles.verifiedBadge}>
+                      <Ionicons name="checkmark-circle" size={14} color="#4CC9F0" />
+                      <Text style={styles.verifiedText}>Verified</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={[styles.profileContact, { fontFamily: 'Lato_400Regular' }]}>{displayUser.phoneNumber || 'Not Provided'}</Text>
+                <Text style={[styles.profileContact, { fontFamily: 'Lato_400Regular' }]}>{displayUser.email || 'Not Provided'}</Text>
               </View>
             </View>
           </View>
 
-          {/* Role-specific cards */}
-          {user?.role === 'delivery-partner' && (
-            <>
-              {/* Vehicle Info Card */}
-              <View style={styles.card}>
-                <Text style={[styles.cardTitle, { fontFamily: 'Inter_700Bold' }]}>Vehicle Information</Text>
+          {displayUser?.role === 'delivery-partner' && (
+            <View style={styles.card}>
+              <Text style={[styles.cardTitle, { fontFamily: 'Inter_700Bold' }]}>Delivery Partner Details</Text>
+              <View style={styles.profileInfo}>
                 <View style={styles.infoRow}>
-                  <MaterialCommunityIcons name="motorbike" size={24} color="#4361EE" />
-                  <Text style={[styles.infoText, { fontFamily: 'Lato_400Regular' }]}>
-                    {user?.deliveryPartnerDetails?.vehicleType === 'motorcycle' ? 'Motorcycle' :
-                      user?.deliveryPartnerDetails?.vehicleType === 'bicycle' ? 'Bicycle' :
-                        user?.deliveryPartnerDetails?.vehicleType === 'electric_vehicle' ? 'Electric Vehicle' :
-                          'Not specified'}
-                  </Text>
+                  <Text style={[{ fontFamily: 'Lato_400Regular', color: '#888', fontSize: 14, minWidth: 120 }]}>Vehicle Type</Text>
+                  <Text style={[{ fontFamily: 'Lato_400Regular', color: '#222', fontSize: 14, textTransform: 'capitalize' }]}>{displayUser.deliveryPartnerDetails?.vehicleType || 'Not Provided'}</Text>
                 </View>
                 <View style={styles.infoRow}>
-                  <MaterialCommunityIcons name="calendar-clock" size={24} color="#4361EE" />
-                  <Text style={[styles.infoText, { fontFamily: 'Lato_400Regular' }]}>
-                    {user?.deliveryPartnerDetails?.employmentType === 'full-time' ? 'Full-time' :
-                      user?.deliveryPartnerDetails?.employmentType === 'part-time' ? 'Part-time' :
-                        'Not specified'}
-                  </Text>
+                  <Text style={[{ fontFamily: 'Lato_400Regular', color: '#888', fontSize: 14, minWidth: 120 }]}>Employment Type</Text>
+                  <Text style={[{ fontFamily: 'Lato_400Regular', color: '#222', fontSize: 14, textTransform: 'capitalize' }]}>{displayUser.deliveryPartnerDetails?.employmentType || 'Not Provided'}</Text>
                 </View>
               </View>
-
-              {/* Status Card */}
-              <View style={styles.card}>
-                <Text style={[styles.cardTitle, { fontFamily: 'Inter_700Bold' }]}>Status</Text>
-                <View style={styles.statusContainer}>
-                  <View style={[
-                    styles.statusIndicator,
-                    user?.deliveryPartnerDetails?.isActive ? styles.activeStatus : styles.inactiveStatus
-                  ]} />
-                  <Text style={[styles.statusText, { fontFamily: 'Lato_700Bold' }]}>
-                    {user?.deliveryPartnerDetails?.isActive ? 'Active' : 'Inactive'}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.toggleButton}
-                  onPress={async () => {
-                    try {
-                      setLoading(true);
-                      await deliveryPartnerService.toggleActiveStatus();
-                      await fetchUserProfile();
-                    } catch (error) {
-                      console.error('Error toggling status:', error);
-                      Alert.alert('Error', 'Failed to update status. Please try again.');
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                >
-                  <Text style={[styles.toggleButtonText, { fontFamily: 'Lato_700Bold' }]}>
-                    {user?.deliveryPartnerDetails?.isActive ? 'Go Offline' : 'Go Online'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
-
-          {user?.role === 'business-owner' && (
-            <>
-              {/* Business Info Card */}
-              <View style={styles.card}>
-                <Text style={[styles.cardTitle, { fontFamily: 'Inter_700Bold' }]}>Business Information</Text>
-                <View style={styles.infoRow}>
-                  <FontAwesome5 name="store" size={20} color="#4361EE" />
-                  <Text style={[styles.infoText, { fontFamily: 'Lato_400Regular' }]}>
-                    {user?.businessOwnerDetails?.businessName || 'Not specified'}
-                  </Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <FontAwesome5 name="building" size={20} color="#4361EE" />
-                  <Text style={[styles.infoText, { fontFamily: 'Lato_400Regular' }]}>
-                    {user?.businessOwnerDetails?.businessType || 'Not specified'}
-                  </Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Ionicons name="location" size={22} color="#4361EE" />
-                  <Text style={[styles.infoText, { fontFamily: 'Lato_400Regular' }]}>
-                    {user?.businessOwnerDetails?.businessAddress || 'Not specified'}
-                  </Text>
-                </View>
-              </View>
-            </>
+            </View>
           )}
 
           {/* Document Status Card */}
@@ -270,75 +256,72 @@ export default function HomeScreen() {
             <Text style={[styles.cardTitle, { fontFamily: 'Inter_700Bold' }]}>Document Status</Text>
             <View style={styles.documentRow}>
               <Text style={[styles.documentLabel, { fontFamily: 'Lato_400Regular' }]}>Aadhar Card</Text>
-              <View style={styles.documentStatus}>
-                {user?.documents?.aadhar ? (
-                  <Ionicons name="checkmark-circle" size={20} color="#4CC9F0" />
-                ) : (
-                  <Ionicons name="close-circle" size={20} color="#FF5A5F" />
-                )}
-              </View>
+              <View style={styles.documentStatus}>{getDocStatusIcon(!!displayUser.documents?.aadhar?.imageUrl)}</View>
             </View>
             <View style={styles.documentRow}>
               <Text style={[styles.documentLabel, { fontFamily: 'Lato_400Regular' }]}>PAN Card</Text>
-              <View style={styles.documentStatus}>
-                {user?.documents?.pan ? (
-                  <Ionicons name="checkmark-circle" size={20} color="#4CC9F0" />
-                ) : (
-                  <Ionicons name="close-circle" size={20} color="#FF5A5F" />
-                )}
-              </View>
+              <View style={styles.documentStatus}>{getDocStatusIcon(!!displayUser.documents?.pan?.imageUrl)}</View>
             </View>
-            {user?.role === 'delivery-partner' && (
-              <>
-                <View style={styles.documentRow}>
-                  <Text style={[styles.documentLabel, { fontFamily: 'Lato_400Regular' }]}>Selfie</Text>
-                  <View style={styles.documentStatus}>
-                    {user?.documents?.selfie ? (
-                      <Ionicons name="checkmark-circle" size={20} color="#4CC9F0" />
-                    ) : (
-                      <Ionicons name="close-circle" size={20} color="#FF5A5F" />
-                    )}
-                  </View>
-                </View>
-                <View style={styles.documentRow}>
-                  <Text style={[styles.documentLabel, { fontFamily: 'Lato_400Regular' }]}>Video Verification</Text>
-                  <View style={styles.documentStatus}>
-                    {user?.documents?.video ? (
-                      <Ionicons name="checkmark-circle" size={20} color="#4CC9F0" />
-                    ) : (
-                      <Ionicons name="close-circle" size={20} color="#FF5A5F" />
-                    )}
-                  </View>
-                </View>
-              </>
-            )}
-            {user?.role === 'business-owner' && (
-              <>
-                <View style={styles.documentRow}>
-                  <Text style={[styles.documentLabel, { fontFamily: 'Lato_400Regular' }]}>Business Images</Text>
-                  <View style={styles.documentStatus}>
-                    {user?.businessOwnerDetails?.businessImages?.length > 0 ? (
-                      <Ionicons name="checkmark-circle" size={20} color="#4CC9F0" />
-                    ) : (
-                      <Ionicons name="close-circle" size={20} color="#FF5A5F" />
-                    )}
-                  </View>
-                </View>
-                <View style={styles.documentRow}>
-                  <Text style={[styles.documentLabel, { fontFamily: 'Lato_400Regular' }]}>Business Video</Text>
-                  <View style={styles.documentStatus}>
-                    {user?.businessOwnerDetails?.businessVideo ? (
-                      <Ionicons name="checkmark-circle" size={20} color="#4CC9F0" />
-                    ) : (
-                      <Ionicons name="close-circle" size={20} color="#FF5A5F" />
-                    )}
-                  </View>
-                </View>
-              </>
-            )}
+            <View style={styles.documentRow}>
+              <Text style={[styles.documentLabel, { fontFamily: 'Lato_400Regular' }]}>Selfie</Text>
+              <View style={styles.documentStatus}>{getDocStatusIcon(!!displayUser.documents?.selfie?.imageUrl)}</View>
+            </View>
+            <View style={styles.documentRow}>
+              <Text style={[styles.documentLabel, { fontFamily: 'Lato_400Regular' }]}>Video Verification</Text>
+              <View style={styles.documentStatus}>{getDocStatusIcon(!!displayUser.documents?.video?.url)}</View>
+            </View>
+          </View>
+
+          {/* Uploaded Documents Card */}
+          <View style={styles.card}>
+            <Text style={[styles.cardTitle, { fontFamily: 'Inter_700Bold' }]}>Uploaded Documents</Text>
+            <View style={styles.documentSection}>
+              <Text style={[styles.documentSectionTitle, { fontFamily: 'Lato_700Bold' }]}>Aadhar Card</Text>
+              {renderDocumentImage('Aadhar', displayUser.documents?.aadhar?.imageUrl)}
+            </View>
+            <View style={styles.documentSection}>
+              <Text style={[styles.documentSectionTitle, { fontFamily: 'Lato_700Bold' }]}>PAN Card</Text>
+              {renderDocumentImage('PAN', displayUser.documents?.pan?.imageUrl)}
+            </View>
+            <View style={styles.documentSection}>
+              <Text style={[styles.documentSectionTitle, { fontFamily: 'Lato_700Bold' }]}>Selfie</Text>
+              {renderDocumentImage('Selfie', displayUser.documents?.selfie?.imageUrl)}
+            </View>
+            <View style={styles.documentSection}>
+              <Text style={[styles.documentSectionTitle, { fontFamily: 'Lato_700Bold' }]}>Video Verification</Text>
+              {renderDocumentVideo(displayUser.documents?.video?.url)}
+            </View>
           </View>
         </ScrollView>
       )}
+
+      {/* Video Modal */}
+      <Modal
+        visible={videoModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setVideoModalVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' }}>
+          <TouchableOpacity
+            style={{ position: 'absolute', top: 40, right: 20, zIndex: 2 }}
+            onPress={() => setVideoModalVisible(false)}
+          >
+            <Ionicons name="close" size={32} color="#fff" />
+          </TouchableOpacity>
+          {currentVideoUrl && (
+            <Video
+              source={{ uri: currentVideoUrl }}
+              style={{ width: width - 32, height: 300, backgroundColor: '#000' }}
+              resizeMode={ResizeMode.COVER}
+              useNativeControls={true}
+            // isLooping={true}
+            // usePoster={true}
+            // posterSource={{ uri: currentVideoUrl }}
+            />
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -385,7 +368,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: 14,
   },
   card: {
     backgroundColor: '#FFFFFF',
@@ -408,12 +391,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#333333',
   },
-  editButton: {
-    padding: 4,
-  },
   profileInfo: {
     flexDirection: 'row',
-    alignItems: 'center',
+    // alignItems: 'center',
+    flexWrap: 'wrap',
+
+    // justifyContent: 'space-between',
   },
   profileImageContainer: {
     marginRight: 16,
@@ -450,9 +433,11 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   infoRow: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     marginVertical: 8,
+    justifyContent: 'space-between',
   },
   infoText: {
     fontSize: 16,
@@ -507,5 +492,75 @@ const styles = StyleSheet.create({
   documentStatus: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  documentImage: {
+    width: width - 64, // Full width minus padding
+    height: 200,
+    borderRadius: 8,
+    backgroundColor: '#F0F0F0',
+  },
+  documentImagePlaceholder: {
+    width: width - 64,
+    height: 200,
+    borderRadius: 8,
+    backgroundColor: '#F0F0F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  documentImageText: {
+    fontSize: 14,
+    color: '#666666',
+    marginTop: 8,
+  },
+  videoContainer: {
+
+    borderRadius: 8,
+    backgroundColor: '#F0F0F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoPlayButton: {
+    position: 'absolute',
+
+    backgroundColor: '#4361EE',
+    borderRadius: 12,
+    padding: 8,
+    marginLeft: 8,
+  },
+  documentSection: {
+    marginBottom: 16,
+  },
+  documentSectionTitle: {
+    fontSize: 18,
+    color: '#333333',
+    marginBottom: 8,
+  },
+  businessImagesContainer: {
+    height: 100,
+  },
+  businessImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E8',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginLeft: 8,
+  },
+  verifiedText: {
+    fontSize: 10,
+    color: '#4CC9F0',
+    fontWeight: 'bold',
+    marginLeft: 2,
   },
 });

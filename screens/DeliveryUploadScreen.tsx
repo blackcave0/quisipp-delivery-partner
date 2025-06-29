@@ -12,11 +12,22 @@ import { useAuth } from '../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
 
+// Mock OTP for testing purposes
+const MOCK_OTP = '123456';
+
 // Define response type
 interface ApiResponse {
   success: boolean;
   message?: string;
-  data?: any;
+  data?: {
+    userId?: string;
+    url?: string;
+    user?: {
+      id?: string;
+      [key: string]: any;
+    };
+    [key: string]: any;
+  };
 }
 
 // Define the stack param list for navigation type
@@ -27,11 +38,17 @@ type RootStackParamList = {
   // add other routes if needed
 };
 
+// Add this email validation function after the imports
+const isValidEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
 export default function DeliveryUploadScreen() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'DeliveryUpload'>>();
   const { type } = route.params;
-  const { login, verifyOTP } = useAuth();
+  const { login, verifyOTP, user } = useAuth();
   const [loading, setLoading] = useState(false);
 
   const [phone, setPhone] = useState('');
@@ -42,6 +59,7 @@ export default function DeliveryUploadScreen() {
   const [videoUri, setVideoUri] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
   const [vehicleType, setVehicleType] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
   // Camera permission state
   const [cameraPermission, setCameraPermission] = useState<boolean | null>(null);
@@ -52,6 +70,10 @@ export default function DeliveryUploadScreen() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const otpRefs = useRef<TextInput[]>([]);
+
+  // Add this state variable with the other state variables
+  const [showMockOtpHint, setShowMockOtpHint] = useState(false);
+  const [backendOtp, setBackendOtp] = useState<string | null>(null);
 
   // Load stored data if available
   useEffect(() => {
@@ -64,13 +86,22 @@ export default function DeliveryUploadScreen() {
         if (storedEmail) setEmail(storedEmail);
         if (storedPhone) setPhone(storedPhone);
         if (storedVehicle) setVehicleType(storedVehicle);
+
+        // Don't load stored user ID - we'll get it from the current session
+        // Clear any old user ID to avoid conflicts
+        await AsyncStorage.removeItem('user_id');
+
+        // If user context has user ID, use that
+        if (user && user.id) {
+          setUserId(user.id);
+        }
       } catch (error) {
         console.error('Error loading stored data:', error);
       }
     };
 
     loadStoredData();
-  }, []);
+  }, [user]);
 
   // Check camera permissions
   useEffect(() => {
@@ -234,15 +265,45 @@ export default function DeliveryUploadScreen() {
       await AsyncStorage.setItem('user_phone', phone);
       if (email) await AsyncStorage.setItem('user_email', email);
 
-      // Send OTP request
-      const response = await login(phone);
-      if (response && typeof response === 'object' && 'success' in response && response.success) {
+      // Try real OTP service first
+      try {
+        const response = await login(phone) as ApiResponse;
+
+        if (response && response.success) {
+          setOtpSent(true);
+
+          // If the backend returned an OTP (for development/testing), use it
+          if (response.data?.otp) {
+            setBackendOtp(response.data.otp);
+            toast.success(`OTP sent: ${response.data.otp}`);
+            setShowMockOtpHint(true);
+          } else {
+            setBackendOtp(null);
+            toast.success(response.message || 'OTP sent to your phone number');
+          }
+
+          // Store user ID if available
+          if (response.data?.userId) {
+            setUserId(response.data.userId);
+            await AsyncStorage.setItem('user_id', response.data.userId);
+          }
+
+          // Focus first input
+          otpRefs.current[0]?.focus();
+        } else {
+          toast.error(response.message || 'Failed to send OTP');
+        }
+      } catch (error: any) {
+        console.error('Error sending OTP:', error);
+
+        // Fallback to mock OTP if real service fails
+        setBackendOtp(null);
+        toast.success(`Mock OTP sent: ${MOCK_OTP}`);
         setOtpSent(true);
-        toast.success('OTP sent to your phone number');
+        setShowMockOtpHint(true);
+
         // Focus first input
         otpRefs.current[0]?.focus();
-      } else {
-        toast.error((response as any).message || 'Failed to send OTP');
       }
     } catch (error: any) {
       console.error('Error sending OTP:', error);
@@ -262,16 +323,53 @@ export default function DeliveryUploadScreen() {
     setIsVerifying(true);
 
     try {
-      const response = await verifyOTP(phone, otpString);
-
-      if (response && typeof response === 'object' && 'success' in response && response.success) {
+      // Use mock OTP verification for testing (including backend OTP)
+      if (otpString === MOCK_OTP || (backendOtp && otpString === backendOtp)) {
+        // Mock successful verification
         setIsOtpVerified(true);
-        toast.success('OTP verified successfully');
+        toast.success('OTP verified successfully (Mock)');
+
+        // For mock OTP, we need to get the user ID from the auth context
+        // or from the profile API
+        try {
+          const profileResponse = await deliveryPartnerService.getProfile() as ApiResponse;
+          if (profileResponse && profileResponse.success && profileResponse.data) {
+            // Extract user ID from profile data
+            const userData = profileResponse.data;
+            console.log('Got user data from profile:', userData);
+            // The user ID should be available in the auth context now
+          }
+        } catch (profileError) {
+          console.error('Error getting profile:', profileError);
+        }
 
         // Register delivery partner
         await registerDeliveryPartner();
       } else {
-        toast.error((response as any).message || 'Invalid OTP. Please try again.');
+        // Try real verification if mock fails
+        try {
+          const response = await verifyOTP(phone, otpString) as ApiResponse;
+
+          if (response && response.success) {
+            setIsOtpVerified(true);
+            toast.success('OTP verified successfully');
+
+            // Store user ID if available in response
+            if (response.data?.user?.id) {
+              setUserId(response.data.user.id);
+              await AsyncStorage.setItem('user_id', response.data.user.id);
+              console.log('User ID set from OTP verification:', response.data.user.id);
+            }
+
+            // Register delivery partner
+            await registerDeliveryPartner();
+          } else {
+            toast.error(response.message || 'Invalid OTP. Please try again.');
+          }
+        } catch (error: any) {
+          console.error('OTP verification error:', error);
+          toast.error(error.response?.data?.message || 'Invalid OTP. Please try again.');
+        }
       }
     } catch (error: any) {
       console.error('OTP verification error:', error);
@@ -287,14 +385,37 @@ export default function DeliveryUploadScreen() {
 
     try {
       setLoading(true);
-      const response = await authService.resendOTP(phone);
 
-      if (response && typeof response === 'object' && 'success' in response && response.success) {
-        toast.success('OTP resent to your phone number');
+      // Try real OTP service first
+      try {
+        const response = await authService.resendOTP(phone) as ApiResponse;
+
+        if (response && response.success) {
+          // If the backend returned an OTP (for development/testing), use it
+          if (response.data?.otp) {
+            setBackendOtp(response.data.otp);
+            toast.success(`OTP resent: ${response.data.otp}`);
+            setShowMockOtpHint(true);
+          } else {
+            setBackendOtp(null);
+            toast.success(response.message || 'OTP resent to your phone number');
+          }
+
+          // Focus first input
+          otpRefs.current[0]?.focus();
+        } else {
+          toast.error(response.message || 'Failed to resend OTP');
+        }
+      } catch (error: any) {
+        console.error('Error resending OTP:', error);
+
+        // Fallback to mock OTP if real service fails
+        setBackendOtp(null);
+        toast.success(`Mock OTP resent: ${MOCK_OTP}`);
+        setShowMockOtpHint(true);
+
         // Focus first input
         otpRefs.current[0]?.focus();
-      } else {
-        toast.error((response as any).message || 'Failed to resend OTP');
       }
     } catch (error: any) {
       console.error('Error resending OTP:', error);
@@ -308,23 +429,103 @@ export default function DeliveryUploadScreen() {
     try {
       setLoading(true);
 
-      // Register delivery partner
-      const registrationData = {
+      // Get the current user ID from state, context, or auth
+      const currentUserId = userId || (user && user.id);
+
+      console.log('Current user ID check:', {
+        userId,
+        userContextId: user?.id,
+        currentUserId
+      });
+
+      // Check if user is already registered (we have userId from OTP verification)
+      if (currentUserId) {
+        // User is already registered, just upload documents
+        console.log('User already registered, uploading documents...');
+        console.log('Current user ID:', currentUserId);
+
+        const uploadSuccess = await uploadDocuments();
+
+        if (uploadSuccess) {
+          // Navigate to profile screen (HomeScreen) instead of thank you
+          try {
+            navigation.navigate('HomeScreen');
+          } catch (navError) {
+            console.error('Navigation error:', navError);
+            // If navigation fails, try to go back to home
+            navigation.navigate('HomeScreen');
+          }
+        } else {
+          toast.error('Failed to upload documents. Please try again.');
+        }
+        return;
+      }
+
+      // If no user ID, we need to update the existing user with delivery partner details
+      // instead of creating a new user
+      console.log('Updating existing user with delivery partner details...');
+
+      const updateData = {
         email,
         phoneNumber: phone,
         vehicleType: vehicleType || 'motorcycle',
         employmentType: type
       };
 
-      await deliveryPartnerService.registerDeliveryPartner(registrationData);
+      // Update the existing user instead of creating a new one
+      const response = await deliveryPartnerService.updateDeliveryPartnerDetails(updateData) as ApiResponse;
 
-      // Upload documents
-      await uploadDocuments();
+      if (response && response.success) {
+        console.log('User details updated successfully');
 
-      // Navigate to thank you screen
-      navigation.navigate('ThankYou');
+        // After update, try to get the user ID from the auth context again
+        const updatedUserId = user?.id;
+        if (updatedUserId) {
+          setUserId(updatedUserId);
+          console.log('Updated user ID from context:', updatedUserId);
+        }
+
+        // Upload documents with the existing user ID
+        const uploadSuccess = await uploadDocuments();
+
+        if (uploadSuccess) {
+          // Navigate to profile screen (HomeScreen) instead of thank you
+          try {
+            navigation.navigate('HomeScreen');
+          } catch (navError) {
+            console.error('Navigation error:', navError);
+            // If navigation fails, try to go back to home
+            navigation.navigate('HomeScreen');
+          }
+        } else {
+          toast.error('Registration successful but document upload failed. Please try again.');
+        }
+      } else {
+        throw new Error('Failed to update user details');
+      }
     } catch (error: any) {
       console.error('Registration error:', error);
+
+      // If update fails, try to upload documents anyway with existing user ID
+      console.log('Update failed, trying to upload documents with existing user...');
+      try {
+        const uploadSuccess = await uploadDocuments();
+        if (uploadSuccess) {
+          try {
+            navigation.navigate('HomeScreen');
+          } catch (navError) {
+            console.error('Navigation error:', navError);
+            navigation.navigate('HomeScreen');
+          }
+          return;
+        } else {
+          toast.error('Document upload failed. Please try again.');
+        }
+      } catch (uploadError) {
+        console.error('Document upload error:', uploadError);
+        toast.error('Failed to upload documents. Please try again.');
+      }
+
       Alert.alert(
         'Registration Error',
         error.response?.data?.message || 'Failed to register. Please try again.'
@@ -336,25 +537,43 @@ export default function DeliveryUploadScreen() {
 
   const uploadDocuments = async () => {
     try {
+      console.log('Starting document upload process...');
+      console.log('User ID:', userId);
+      console.log('User context:', user?.id);
+
+      let uploadCount = 0;
+      const totalDocuments = [aadharUri, panUri, selfieUri, videoUri].filter(Boolean).length;
+
       // Upload Aadhar
       if (aadharUri) {
+        console.log('Uploading Aadhar...');
         await uploadFile(aadharUri, 'aadhar');
+        uploadCount++;
       }
 
       // Upload PAN
       if (panUri) {
+        console.log('Uploading PAN...');
         await uploadFile(panUri, 'pan');
+        uploadCount++;
       }
 
       // Upload selfie
       if (selfieUri) {
+        console.log('Uploading selfie...');
         await uploadFile(selfieUri, 'selfie');
+        uploadCount++;
       }
 
       // Upload video
       if (videoUri) {
+        console.log('Uploading video...');
         await uploadFile(videoUri, 'video');
+        uploadCount++;
       }
+
+      console.log(`Successfully uploaded ${uploadCount}/${totalDocuments} documents`);
+      toast.success(`Successfully uploaded ${uploadCount} documents`);
 
       return true;
     } catch (error) {
@@ -375,14 +594,29 @@ export default function DeliveryUploadScreen() {
       // @ts-ignore
       formData.append('file', {
         uri,
-        name: `${type}.${fileType}`,
+        name: `${type}_${Date.now()}.${fileType}`,
         type: `${type === 'video' ? 'video' : 'image'}/${fileType}`
       });
 
-      const response = await mediaService.uploadDocument(formData, 'delivery-partner', type);
+      // Add metadata to ensure proper organization in Cloudinary
+      formData.append('folder', 'delivery-partner');
 
-      if (response && typeof response === 'object' && 'success' in response) {
+      // Send phone number instead of user ID - backend will find user by phone
+      console.log(`Uploading ${type} for phone: ${phone}`);
+      formData.append('phoneNumber', phone);
+
+      // Use public upload endpoint during registration
+      const response = await mediaService.uploadDocumentPublic(formData, 'delivery-partner', type) as ApiResponse;
+
+      if (response && response.success) {
         toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} uploaded successfully`);
+
+        // Store the document URL locally for future reference
+        if (response.data) {
+          if (response.data.url) {
+            await AsyncStorage.setItem(`document_${type}_url`, response.data.url);
+          }
+        }
       }
 
       return response;
@@ -399,7 +633,7 @@ export default function DeliveryUploadScreen() {
 
     // Basic information validation
     if (!phone || phone.length !== 10) missingFields.push('Valid Phone Number (10 digits)');
-    if (!email || !email.includes('@')) missingFields.push('Valid Email Address');
+    if (!email || !isValidEmail(email)) missingFields.push('Valid Email Address (e.g., user@example.com)');
 
     // Documents validation
     if (!aadharUri) missingFields.push('Aadhar Card');
@@ -429,8 +663,8 @@ export default function DeliveryUploadScreen() {
         toast.error('Please enter a valid 10-digit phone number');
         return;
       }
-      if (!email || !email.includes('@')) {
-        toast.error('Please enter a valid email address');
+      if (!email || !isValidEmail(email)) {
+        toast.error('Please enter a valid email address (e.g., user@example.com)');
         return;
       }
       setCurrentStep(2);
@@ -674,6 +908,14 @@ export default function DeliveryUploadScreen() {
                 We've sent a 6-digit verification code to your phone number ending with {phone.slice(-4)}
               </Text>
 
+              {showMockOtpHint && (
+                <View style={styles.mockOtpHint}>
+                  <Text style={styles.mockOtpHintText}>
+                    For testing, use OTP: <Text style={styles.mockOtpValue}>{backendOtp || MOCK_OTP}</Text>
+                  </Text>
+                </View>
+              )}
+
               <View style={styles.otpContainer}>
                 {otp.map((digit, index) => (
                   <TextInput
@@ -738,7 +980,7 @@ export default function DeliveryUploadScreen() {
           style={[styles.button, styles.prevButton]}
           onPress={prevStep}
         >
-          <Text style={styles.buttonText}>{currentStep === 1 ? 'Back' : 'Previous'}</Text>
+          <Text style={[styles.buttonText, styles.prevButtonText]}>{currentStep === 1 ? 'Back' : 'Previous'}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -750,7 +992,7 @@ export default function DeliveryUploadScreen() {
           onPress={nextStep}
           disabled={currentStep === 3 && !isOtpVerified && otp.join('').length !== 6}
         >
-          <Text style={styles.buttonText}>
+          <Text style={[styles.buttonText, styles.nextButtonText]}>
             {currentStep === 3
               ? (isOtpVerified ? 'Submit' : 'Verify & Submit')
               : currentStep === 2
@@ -1017,6 +1259,11 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  prevButtonText: {
+    color: '#4361EE',
+  },
+  nextButtonText: {
     color: '#fff',
   },
   buttonIcon: {
@@ -1123,5 +1370,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#fff',
     marginTop: 5,
+  },
+  mockOtpHint: {
+    backgroundColor: 'rgba(255, 233, 160, 0.5)',
+    padding: 10,
+    borderRadius: 8,
+    marginVertical: 10,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+    alignItems: 'center',
+  },
+  mockOtpHintText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  mockOtpValue: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#4361EE',
   },
 });

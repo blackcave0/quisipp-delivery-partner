@@ -23,7 +23,7 @@ import { StatusBar } from 'expo-status-bar';
 const Stack = createNativeStackNavigator();
 
 function RootStack() {
-    const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
   // Show splash screen while checking authentication
   if (isLoading) {
@@ -45,6 +45,7 @@ function RootStack() {
         <>
           <Stack.Screen name="HomeScreen" component={HomeScreen} />
           <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
+          <Stack.Screen name="ThankYou" component={ThankYouScreen} />
         </>
       ) : (
         // Unauthenticated routes

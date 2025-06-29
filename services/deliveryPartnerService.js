@@ -11,7 +11,7 @@ import api from "./api";
  */
 export const registerDeliveryPartner = async (partnerData) => {
   try {
-    const response = await api.post("/delivery-partners", partnerData);
+    const response = await api.post("/delivery-partners/register", partnerData);
     return response.data;
   } catch (error) {
     console.error(
@@ -112,9 +112,32 @@ export const toggleActiveStatus = async () => {
 export const getProfile = async () => {
   try {
     const response = await api.get("/delivery-partners/profile");
+    // console.log(response.data);
     return response.data;
   } catch (error) {
     console.error("Get profile error:", error.response?.data || error.message);
+    throw error;
+  }
+};
+
+/**
+ * Update delivery partner details (for existing users)
+ * @param {Object} partnerData - Delivery partner details to update
+ * @param {string} partnerData.email - Partner's email
+ * @param {string} partnerData.phoneNumber - Partner's phone number
+ * @param {string} partnerData.vehicleType - Vehicle type (motorcycle, bicycle, electric_vehicle)
+ * @param {string} partnerData.employmentType - Employment type (part-time, full-time)
+ * @returns {Promise<Object>} Update response
+ */
+export const updateDeliveryPartnerDetails = async (partnerData) => {
+  try {
+    const response = await api.put("/delivery-partners/details", partnerData);
+    return response.data;
+  } catch (error) {
+    console.error(
+      "Update delivery partner details error:",
+      error.response?.data || error.message
+    );
     throw error;
   }
 };
