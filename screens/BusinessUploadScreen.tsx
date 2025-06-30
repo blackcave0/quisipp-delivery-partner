@@ -80,15 +80,20 @@ export default function BusinessUploadScreen() {
   // pincode
   const [pincode, setPincode] = useState('');
 
+  // Add userId state
+  const [userId, setUserId] = useState<string | null>(null);
+
   // Load stored data if available
   useEffect(() => {
     const loadStoredData = async () => {
       try {
         const storedEmail = await AsyncStorage.getItem('user_email');
         const storedPhone = await AsyncStorage.getItem('user_phone');
+        const storedUserId = await AsyncStorage.getItem('user_id');
 
         if (storedEmail) setEmail(storedEmail);
         if (storedPhone) setPhone(storedPhone);
+        if (storedUserId) setUserId(storedUserId);
       } catch (error) {
         console.error('Error loading stored data:', error);
       }
@@ -239,6 +244,17 @@ export default function BusinessUploadScreen() {
     if (value && index < 5) {
       otpRefs.current[index + 1]?.focus();
     }
+
+    // Auto-verify when all digits are filled
+    if (index === 5 && value) {
+      const completeOtp = [...newOtp.slice(0, 5), value].join('');
+      if (completeOtp.length === 6 && !isVerifying && !isOtpVerified) {
+        // Add a slight delay to allow UI to update
+        setTimeout(() => {
+          verifyOtpCode();
+        }, 300);
+      }
+    }
   };
 
   const handleOtpKeyPress = (key: string, index: number) => {
@@ -286,22 +302,90 @@ export default function BusinessUploadScreen() {
       return;
     }
 
+    // Prevent duplicate verification attempts
+    if (isVerifying || isOtpVerified) {
+      return;
+    }
+
     setIsVerifying(true);
 
     try {
+      toast.info('Verifying OTP...');
       const response = await verifyOTP(phone, otpString);
 
       if (response && typeof response === 'object' && 'success' in response && response.success) {
         setIsOtpVerified(true);
         toast.success('OTP verified successfully');
 
-        // Register business owner
-        await registerBusinessOwner();
+        // Store the user ID from the response
+        if (response.data && response.data.user && response.data.user.id) {
+          const id = response.data.user.id;
+          setUserId(id);
+          // Also store in AsyncStorage for persistence
+          await AsyncStorage.setItem('user_id', id);
+          console.log('User ID stored:', id);
+
+          // Wait a moment to ensure the user ID is properly saved
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          // Upload documents one by one with delays between them
+          toast.info('Starting document upload process...');
+          try {
+            // Upload documents with delays between each to avoid race conditions
+            if (aadharUri) {
+              await uploadFile(aadharUri, 'aadhar');
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
+            if (panUri) {
+              await uploadFile(panUri, 'pan');
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
+            if (selfieUri) {
+              await uploadFile(selfieUri, 'selfie');
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
+            if (videoUri) {
+              await uploadFile(videoUri, 'video');
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
+            if (shopImageUri) {
+              await uploadFile(shopImageUri, 'business-image');
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
+            if (shopVideoUri) {
+              await uploadFile(shopVideoUri, 'business-video');
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
+            toast.success('Documents uploaded successfully');
+
+            // Then register business owner with document references
+            await registerBusinessOwner();
+          } catch (error) {
+            console.error('Document upload error:', error);
+            toast.error('Some documents failed to upload. You can still continue with registration.');
+            await registerBusinessOwner();
+          }
+        } else {
+          console.error('User ID not found in response:', response);
+          toast.error('Failed to get user ID. Please try again.');
+        }
       } else {
+        // Clear OTP fields on failure
+        setOtp(['', '', '', '', '', '']);
+        otpRefs.current[0]?.focus();
         toast.error((response as any).message || 'Invalid OTP. Please try again.');
       }
     } catch (error: any) {
       console.error('OTP verification error:', error);
+      // Clear OTP fields on error
+      setOtp(['', '', '', '', '', '']);
+      otpRefs.current[0]?.focus();
       toast.error(error.response?.data?.message || 'Invalid OTP. Please try again.');
     } finally {
       setIsVerifying(false);
@@ -332,33 +416,49 @@ export default function BusinessUploadScreen() {
   };
 
   const registerBusinessOwner = async () => {
+    // Only proceed if we have a user ID
+    if (!userId) {
+      toast.error('Missing user ID. Please try again.');
+      return false;
+    }
+
     try {
       setLoading(true);
+      toast.info('Finalizing registration...');
 
       // Register business owner
       const registrationData = {
+        userId, // Include the user ID
         email,
         phoneNumber: phone,
         businessName,
-        businessType: businessType || categories.join(','),
-        ...(hasGstin && gstin ? { gstin } : {}),
+        businessType,
+        gstin,
+        categories,
         businessAddress: address,
-        pincode
+        pincode,
       };
 
-      await businessOwnerService.registerBusinessOwner(registrationData);
+      const response = await businessOwnerService.registerBusinessOwner(registrationData);
 
-      // Upload documents
-      await uploadDocuments();
+      // TypeScript fix: check if response is an object with success property
+      if (response && typeof response === 'object' && 'success' in response && response.success) {
+        toast.success('Registration completed successfully!');
 
-      // Navigate to thank you screen
-      navigation.navigate('ThankYou');
+        // Navigate to thank you screen
+        navigation.navigate('ThankYou');
+        return true;
+      } else {
+        toast.error('Registration failed. Please try again.');
+        return false;
+      }
     } catch (error: any) {
       console.error('Registration error:', error);
       Alert.alert(
         'Registration Error',
         error.response?.data?.message || 'Failed to register. Please try again.'
       );
+      return false;
     } finally {
       setLoading(false);
     }
@@ -366,41 +466,102 @@ export default function BusinessUploadScreen() {
 
   const uploadDocuments = async () => {
     try {
+      setLoading(true);
+      toast.info('Uploading documents, please wait...');
+
+      // Track upload progress
+      let uploadedCount = 0;
+      let failedUploads = [];
+      const totalDocuments = [aadharUri, panUri, selfieUri, videoUri, shopImageUri, shopVideoUri].filter(Boolean).length;
+
       // Upload Aadhar
       if (aadharUri) {
-        await uploadFile(aadharUri, 'aadhar');
+        try {
+          await uploadFile(aadharUri, 'aadhar');
+          uploadedCount++;
+          toast.info(`Uploading documents (${uploadedCount}/${totalDocuments})...`);
+        } catch (error) {
+          console.error('Failed to upload Aadhar:', error);
+          failedUploads.push('Aadhar Card');
+        }
       }
 
       // Upload PAN
       if (panUri) {
-        await uploadFile(panUri, 'pan');
+        try {
+          await uploadFile(panUri, 'pan');
+          uploadedCount++;
+          toast.info(`Uploading documents (${uploadedCount}/${totalDocuments})...`);
+        } catch (error) {
+          console.error('Failed to upload PAN:', error);
+          failedUploads.push('PAN Card');
+        }
       }
 
       // Upload selfie
       if (selfieUri) {
-        await uploadFile(selfieUri, 'selfie');
+        try {
+          await uploadFile(selfieUri, 'selfie');
+          uploadedCount++;
+          toast.info(`Uploading documents (${uploadedCount}/${totalDocuments})...`);
+        } catch (error) {
+          console.error('Failed to upload Selfie:', error);
+          failedUploads.push('Selfie');
+        }
       }
 
       // Upload verification video
       if (videoUri) {
-        await uploadFile(videoUri, 'video');
+        try {
+          await uploadFile(videoUri, 'video');
+          uploadedCount++;
+          toast.info(`Uploading documents (${uploadedCount}/${totalDocuments})...`);
+        } catch (error) {
+          console.error('Failed to upload Video:', error);
+          failedUploads.push('Verification Video');
+        }
       }
 
       // Upload business images
       if (shopImageUri) {
-        await uploadFile(shopImageUri, 'business-image');
+        try {
+          await uploadFile(shopImageUri, 'business-image');
+          uploadedCount++;
+          toast.info(`Uploading documents (${uploadedCount}/${totalDocuments})...`);
+        } catch (error) {
+          console.error('Failed to upload Shop Image:', error);
+          failedUploads.push('Shop Image');
+        }
       }
 
       // Upload business video
       if (shopVideoUri) {
-        await uploadFile(shopVideoUri, 'business-video');
+        try {
+          await uploadFile(shopVideoUri, 'business-video');
+          uploadedCount++;
+          toast.info(`Uploading documents (${uploadedCount}/${totalDocuments})...`);
+        } catch (error) {
+          console.error('Failed to upload Shop Video:', error);
+          failedUploads.push('Shop Video');
+        }
       }
 
+      // Check if any uploads failed
+      if (failedUploads.length > 0) {
+        toast.error(`Failed to upload: ${failedUploads.join(', ')}. You can continue with registration.`);
+        // Return true anyway to allow registration to continue
+        return true;
+      }
+
+      toast.success('All documents uploaded successfully!');
       return true;
     } catch (error) {
       console.error('Document upload error:', error);
-      toast.error('Failed to upload some documents. Please try again.');
-      return false;
+      toast.error('Failed to upload some documents. You can still continue with registration.');
+      // Return true to allow registration to continue even if document uploads fail
+      return true;
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -410,25 +571,81 @@ export default function BusinessUploadScreen() {
 
       // Get file name and type
       const uriParts = uri.split('.');
-      const fileType = uriParts[uriParts.length - 1];
+      const fileType = uriParts[uriParts.length - 1].toLowerCase();
+
+      // Ensure we have a valid file type
+      const validFileType = ['jpg', 'jpeg', 'png', 'mp4', 'mov'].includes(fileType)
+        ? fileType
+        : (type.includes('video') ? 'mp4' : 'jpeg');
+
+      const isVideo = type === 'business-video' || type === 'video';
+      const mimePrefix = isVideo ? 'video' : 'image';
+      const mimeType = isVideo
+        ? (fileType === 'mov' ? 'video/quicktime' : 'video/mp4')
+        : (fileType === 'png' ? 'image/png' : 'image/jpeg');
+
+      const fileName = `${type}_${new Date().getTime()}.${validFileType}`;
+
+      console.log(`Preparing to upload ${type}:`, {
+        uri,
+        name: fileName,
+        type: mimeType,
+        isVideo,
+        fileType
+      });
 
       // @ts-ignore
       formData.append('file', {
         uri,
-        name: `${type}.${fileType}`,
-        type: `${type === 'business-video' || type === 'video' ? 'video' : 'image'}/${fileType}`
+        name: fileName,
+        type: mimeType
       });
 
-      const response = await mediaService.uploadDocument(formData, 'business-owner', type);
-
-      if (response && typeof response === 'object' && 'success' in response) {
-        toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} uploaded successfully`);
+      // Add user identification - include userId if available
+      if (userId) {
+        formData.append('userId', userId);
+        console.log('Including userId in upload:', userId);
+      } else {
+        // Try to get userId from AsyncStorage as fallback
+        const storedUserId = await AsyncStorage.getItem('user_id');
+        if (storedUserId) {
+          formData.append('userId', storedUserId);
+          console.log('Including stored userId in upload:', storedUserId);
+        } else {
+          console.warn('No userId available for upload!');
+        }
       }
 
-      return response;
-    } catch (error) {
+      // Include phone and email as backup identification
+      formData.append('phoneNumber', phone);
+      if (email) formData.append('email', email);
+
+      // Log the form data for debugging
+      console.log(`FormData for ${type} upload:`, Object.fromEntries(formData as any));
+
+      // Use public upload endpoint since user might not be authenticated yet
+      console.log(`Uploading ${type} to server...`);
+      const response = await mediaService.uploadDocumentPublic(formData, 'business-owner', type);
+      console.log(`Upload response for ${type}:`, response);
+
+      if (response && typeof response === 'object' && 'success' in response && response.success) {
+        // TypeScript fix: ensure response.data exists and has url property
+        const responseData = response as { data?: { url?: string } };
+        if (responseData.data?.url) {
+          console.log(`${type} uploaded successfully:`, responseData.data.url);
+          return responseData.data;
+        }
+        return true;
+      } else {
+        const errorMessage = response && typeof response === 'object' && 'message' in response
+          ? response.message
+          : 'Unknown error';
+        throw new Error(`Failed to upload ${type}: ${errorMessage}`);
+      }
+    } catch (error: any) {
       console.error(`Error uploading ${type}:`, error);
-      toast.error(`Failed to upload ${type}. Please try again.`);
+      console.error(`Error details:`, error.response?.data || error.message);
+      toast.error(`Failed to upload ${type}. ${error.message || 'Please try again.'}`);
       throw error;
     }
   };
@@ -464,12 +681,27 @@ export default function BusinessUploadScreen() {
       return;
     }
 
-    // If OTP already verified, register directly
+    // If OTP is already verified, show completion message
     if (isOtpVerified) {
-      await registerBusinessOwner();
-    } else {
-      // Send OTP first
+      toast.success('Registration already completed!');
+      return;
+    }
+
+    // If OTP is not verified but filled, verify it
+    const otpString = otp.join('');
+    if (otpString.length === 6) {
+      await verifyOtpCode();
+      return;
+    }
+
+    // If OTP is not verified and not yet sent or not complete, send OTP
+    if (!otpSent || otpString.length < 6) {
       await sendOtp();
+      toast.info('Please enter the OTP sent to your phone');
+      // Focus first input if empty
+      if (!otp[0]) {
+        otpRefs.current[0]?.focus();
+      }
     }
   };
 
@@ -907,26 +1139,20 @@ export default function BusinessUploadScreen() {
               keyboardType="numeric"
               maxLength={1}
               textAlign="center"
-              editable={!isOtpVerified}
+              editable={!isOtpVerified && !isVerifying}
             />
           ))}
         </View>
 
-        {!isOtpVerified && (
-          <View style={styles.otpActions}>
-            <TouchableOpacity
-              style={styles.verifyButton}
-              onPress={verifyOtpCode}
-              disabled={isVerifying || otp.join('').length !== 6}
-            >
-              <Text style={[
-                styles.verifyButtonText,
-                (isVerifying || otp.join('').length !== 6) && styles.verifyButtonTextDisabled
-              ]}>
-                {isVerifying ? 'Verifying...' : 'Verify OTP'}
-              </Text>
-            </TouchableOpacity>
+        {isVerifying && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#4361EE" />
+            <Text style={styles.loadingText}>Verifying OTP...</Text>
+          </View>
+        )}
 
+        {!isOtpVerified && !isVerifying && (
+          <View style={styles.otpActions}>
             <TouchableOpacity
               style={styles.resendButton}
               onPress={resendOtp}
@@ -993,6 +1219,24 @@ export default function BusinessUploadScreen() {
       }
     };
 
+    // Check if submit button should be disabled
+    const isSubmitDisabled = () => {
+      // Disable if verification is in progress
+      if (isVerifying) return true;
+
+      // Disable if already verified
+      if (isOtpVerified) return true;
+
+      // In OTP section, enable only if OTP is filled completely
+      if (currentSection === 4) {
+        const otpString = otp.join('');
+        return otpString.length !== 6; // Disable if OTP is not complete
+      }
+
+      // Enable in all other cases
+      return false;
+    };
+
     return (
       <View style={styles.navButtons}>
         {currentSection > 0 && (
@@ -1017,12 +1261,12 @@ export default function BusinessUploadScreen() {
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            style={[styles.submitButton, !isOtpVerified && styles.submitButtonDisabled]}
-            onPress={isOtpVerified ? handleSubmit : verifyOtpCode}
-            disabled={!isOtpVerified && otp.join('').length !== 6}
+            style={[styles.submitButton, isSubmitDisabled() && styles.submitButtonDisabled]}
+            onPress={handleSubmit}
+            disabled={isSubmitDisabled()}
           >
             <Text style={styles.submitButtonText}>
-              {isOtpVerified ? 'Submit' : 'Verify & Submit'}
+              {isVerifying ? 'Processing...' : (isOtpVerified ? 'Completed' : 'Submit')}
             </Text>
             <MaterialIcons name="check-circle" size={20} color="#fff" />
           </TouchableOpacity>
@@ -1391,23 +1635,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
   },
-  verifyButton: {
-    backgroundColor: '#4361EE',
-    paddingVertical: 12,
-    paddingHorizontal: 40,
-    borderRadius: 8,
-    marginBottom: 15,
-    minWidth: 150,
-    alignItems: 'center',
-  },
-  verifyButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  verifyButtonTextDisabled: {
-    opacity: 0.6,
-  },
   resendButton: {
     paddingVertical: 8,
     paddingHorizontal: 20,
@@ -1470,5 +1697,15 @@ const styles = StyleSheet.create({
   checkboxLabel: {
     fontSize: 16,
     color: '#333',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 20,
+  },
+  loadingText: {
+    marginTop: 10,
+    color: '#4361EE',
+    fontSize: 16,
   },
 });

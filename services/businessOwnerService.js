@@ -3,15 +3,20 @@ import api from "./api";
 /**
  * Register a new business owner
  * @param {Object} businessData - Business owner registration data
+ * @param {string} businessData.userId - User ID (optional)
  * @param {string} businessData.email - Business owner's email
  * @param {string} businessData.phoneNumber - Business owner's phone number
  * @param {string} businessData.businessName - Business name
  * @param {string} businessData.businessType - Business type
+ * @param {string} businessData.gstin - Business GSTIN (optional)
+ * @param {string[]} businessData.categories - Business categories
+ * @param {string} businessData.businessAddress - Business address
  * @param {string} businessData.pincode - Business pincode
  * @returns {Promise<Object>} Registration response
  */
 export const registerBusinessOwner = async (businessData) => {
   try {
+    console.log("Registering business owner with data:", businessData);
     const response = await api.post("/business-owners", businessData);
     return response.data;
   } catch (error) {
@@ -52,6 +57,8 @@ export const updateProfile = async (profileData) => {
  * @param {Object} businessDetails - Business details to update
  * @param {string} businessDetails.businessName - Business name
  * @param {string} businessDetails.businessType - Business type
+ * @param {string} businessDetails.gstin - Business GSTIN (optional)
+ * @param {string[]} businessDetails.categories - Business categories
  * @param {string} businessDetails.businessAddress - Business address
  * @param {string} businessDetails.businessCity - Business city
  * @param {string} businessDetails.businessState - Business state
