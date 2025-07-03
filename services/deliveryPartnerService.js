@@ -3,6 +3,8 @@ import api from "./api";
 /**
  * Register a new delivery partner
  * @param {Object} partnerData - Delivery partner registration data
+ * @param {string} partnerData.firstName - Partner's first name
+ * @param {string} partnerData.lastName - Partner's last name
  * @param {string} partnerData.email - Partner's email
  * @param {string} partnerData.phoneNumber - Partner's phone number
  * @param {string} partnerData.vehicleType - Vehicle type (motorcycle, bicycle, electric_vehicle)
@@ -123,6 +125,8 @@ export const getProfile = async () => {
 /**
  * Update delivery partner details (for existing users)
  * @param {Object} partnerData - Delivery partner details to update
+ * @param {string} partnerData.firstName - Partner's first name
+ * @param {string} partnerData.lastName - Partner's last name
  * @param {string} partnerData.email - Partner's email
  * @param {string} partnerData.phoneNumber - Partner's phone number
  * @param {string} partnerData.vehicleType - Vehicle type (motorcycle, bicycle, electric_vehicle)
