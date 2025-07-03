@@ -205,6 +205,7 @@ export const logout = async () => {
   try {
     await AsyncStorage.removeItem("auth_token");
     await AsyncStorage.removeItem("user_data");
+    await AsyncStorage.removeItem("selected_role");
   } catch (error) {
     console.error("Logout error:", error);
     throw error;
