@@ -5,9 +5,10 @@ import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-ico
 import { useAuth } from '../contexts/AuthContext';
 import { deliveryPartnerService, businessOwnerService } from '../services';
 import { useFonts, Lato_400Regular, Lato_700Bold, Inter_400Regular, Inter_700Bold } from '@expo-google-fonts/dev';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, NavigationProp } from '@react-navigation/native';
 // import Video from 'react-native-video';
 import { ResizeMode, Video } from 'expo-av';
+import { StackNavigationProp } from '@react-navigation/stack';
 
 // Define response type
 interface ApiResponse {
@@ -16,9 +17,16 @@ interface ApiResponse {
   data: any;
 }
 
+type RootStackParamList = {
+  ThankYou: undefined;
+  HomeScreen: undefined;
+  RoleSelect: undefined;
+  // add other routes if needed
+};
+
 const { width } = Dimensions.get('window');
 
-export default function HomeScreen() {
+export default function HomeScreen({ navigation }: { navigation: StackNavigationProp<RootStackParamList> }) {
   const { user, logout } = useAuth();
   // const { user, logout } = { user: { role: 'delivery-partner', profile: { firstName: 'John', lastName: 'Doe', phoneNumber: '1234567890', email: 'john.doe@example.com', profilePicture: { url: 'https://via.placeholder.com/150' } } }, logout: () => { } };
 
@@ -47,7 +55,6 @@ export default function HomeScreen() {
 
 
 
-  const navigation = useNavigation();
   const [loading, setLoading] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [videoModalVisible, setVideoModalVisible] = useState(false);
@@ -92,6 +99,7 @@ export default function HomeScreen() {
     try {
       setLoading(true);
       await logout();
+      (navigation as any).navigate('RoleSelect');
       // Navigation will be handled by the auth context
     } catch (error) {
       console.error('Logout error:', error);
@@ -111,9 +119,14 @@ export default function HomeScreen() {
 
   // Helper function to get display name (use email or phone if no name)
   const getDisplayName = () => {
-    if (displayUser.email) return displayUser.email;
+      // if (displayUser.email) return displayUser.email;
+    if (displayUser.profile?.firstName) return displayUser.profile.firstName ;
     if (displayUser.phoneNumber) return displayUser.phoneNumber;
     return 'Delivery Partner';
+  };
+
+  const getBusinessName = () => {
+    return displayUser.businessOwnerDetails?.businessName || 'Not Provided';
   };
 
   // Helper function to get profile initial (use first letter of email or phone)
@@ -127,6 +140,7 @@ export default function HomeScreen() {
   const getProfilePicture = () => {
     return displayUser?.profile?.profilePicture?.url || null;
   };
+
 
   // Helper for document status
   const getDocStatusIcon = (exists: boolean) =>
@@ -185,8 +199,8 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View>
-          <Text style={[styles.welcomeText, { fontFamily: 'Inter_700Bold' }]}>Welcome, {getDisplayName()}!</Text>
-          <Text style={[styles.roleText, { fontFamily: 'Lato_400Regular' }]}>{displayUser?.role === 'delivery-partner' ? 'Delivery Partner' : (displayUser?.role || 'User')}</Text>
+          <Text style={[styles.welcomeText, { fontFamily: 'Inter_700Bold' }]}>Welcome, {displayUser?.role == 'delivery-partner' ? getDisplayName() : getBusinessName()}!</Text>
+          <Text style={[styles.roleText, { fontFamily: 'Lato_400Regular' }]}>{displayUser?.role === 'delivery-partner' ? 'Delivery Partner' : (displayUser?.role === 'business-owner' ? 'Shop Owner' : (displayUser?.role || 'User'))}</Text>
         </View>
         <View style={styles.headerButtons}>
           <TouchableOpacity style={styles.helpButton} onPress={handleHelpCenter}>
@@ -250,6 +264,43 @@ export default function HomeScreen() {
               </View>
             </View>
           )}
+
+
+          {/* Shop Details Card */}
+          {displayUser?.role == 'business-owner' && (
+            <View style={styles.card}>
+              <Text style={[styles.cardTitle, { fontFamily: 'Inter_700Bold' }]}>Shop Details</Text>
+              <View style={styles.profileInfo}>
+                <View style={styles.infoRow}>
+                  <Text style={[{ fontFamily: 'Lato_400Regular', color: '#888', fontSize: 14, minWidth: 120 }]}>Business Name</Text>
+                  <Text style={[{ fontFamily: 'Lato_400Regular', color: '#222', fontSize: 14, textTransform: 'capitalize' }]}>{getBusinessName()}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={[{ fontFamily: 'Lato_400Regular', color: '#888', fontSize: 14, minWidth: 120 }]}>Business Type</Text>
+                  <Text style={[{ fontFamily: 'Lato_400Regular', color: '#222', fontSize: 14, textTransform: 'capitalize' }]}>{displayUser.businessOwnerDetails?.businessType || 'Not Provided'}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={[{ fontFamily: 'Lato_400Regular', color: '#888', fontSize: 14, minWidth: 120 }]}>Business Address</Text>
+                  <Text style={[{ fontFamily: 'Lato_400Regular', color: '#222', fontSize: 14, textTransform: 'capitalize' }]}>{displayUser.businessOwnerDetails?.businessAddress || 'Not Provided'}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={[{ fontFamily: 'Lato_400Regular', color: '#888', fontSize: 14, minWidth: 120 }]}>Pincode</Text>
+                  <Text style={[{ fontFamily: 'Lato_400Regular', color: '#222', fontSize: 14, textTransform: 'capitalize' }]}>{displayUser.businessOwnerDetails?.pincode || 'Not Provided'}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={[{ fontFamily: 'Lato_400Regular', color: '#888', fontSize: 14, minWidth: 120 }]}>GSTIN</Text>
+                  <Text style={[{ fontFamily: 'Lato_400Regular', color: '#222', fontSize: 14, textTransform: 'capitalize' }]}>{displayUser.businessOwnerDetails?.gstin || 'Not Provided'}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={[{ fontFamily: 'Lato_400Regular', color: '#888', fontSize: 14, minWidth: 120 }]}>Categories</Text>
+                  <Text style={[{ fontFamily: 'Lato_400Regular', color: '#222', fontSize: 14, textTransform: 'capitalize' }]}>{displayUser.businessOwnerDetails?.categories?.join(', ') || 'Not Provided'}</Text>
+                </View>
+              </View>
+            </View>
+
+          )}
+
+
 
           {/* Document Status Card */}
           <View style={styles.card}>
