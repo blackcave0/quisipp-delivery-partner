@@ -9,6 +9,7 @@ const { width } = Dimensions.get('window');
 // Define the stack param list for navigation type
 type RootStackParamList = {
   Splash: undefined;
+  HomeScreen: undefined;
   // add other routes if needed
 };
 
@@ -114,7 +115,7 @@ export default function ThankYouScreen() {
       </View>
       <Text style={styles.thankYouText}>Thank You!</Text>
       <Text style={styles.subText}>Your submission was successful. We appreciate your time and trust in us.</Text>
-      <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Splash')}>
+      <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('HomeScreen')}>
         <LinearGradient
           colors={["#4361EE", "#4CC9F0"]}
           start={{ x: 0, y: 0 }}
