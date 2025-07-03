@@ -119,7 +119,7 @@ export default function BusinessUploadScreen() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: false,
         quality: 1.0,
         presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN
@@ -143,7 +143,7 @@ export default function BusinessUploadScreen() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        mediaTypes: ['videos'],
         allowsEditing: false,
         quality: 1.0,
         videoMaxDuration: 60, // 1 minute max
@@ -177,10 +177,11 @@ export default function BusinessUploadScreen() {
       }
 
       const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
+        allowsEditing: false,
         quality: 1,
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        aspect: [1, 1],
+        mediaTypes: ['images'],
+        // aspect: [1, 1],
+        cameraType: ImagePicker.CameraType.front,
         presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN
       });
 
@@ -205,7 +206,7 @@ export default function BusinessUploadScreen() {
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         quality: 1,
-        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        mediaTypes: ['videos'],
         videoMaxDuration: 60, // 1 minute max
         presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN
       });
@@ -270,12 +271,41 @@ export default function BusinessUploadScreen() {
       return;
     }
 
+    // Validate that all required business information is filled before sending OTP
+    const missingFields = [];
+    if (!businessName) missingFields.push('Business Name');
+    if (!address) missingFields.push('Shop Address');
+    if (!pincode) missingFields.push('Pincode');
+    if (!categories?.length) missingFields.push('Business Categories');
+    if (!email) missingFields.push('Email');
+
+    if (missingFields.length > 0) {
+      toast.error(`Please fill in all required information: ${missingFields.join(', ')}`);
+      // Navigate back to the first section
+      setCurrentSection(0);
+      return;
+    }
+
     try {
       setLoading(true);
+
+      // Clear any previous session data before starting new registration
+      console.log('🧹 Starting fresh registration - clearing old session data...');
+      setUserId(null);
+      await AsyncStorage.removeItem('user_id');
 
       // Store phone and email for later use
       await AsyncStorage.setItem('user_phone', phone);
       if (email) await AsyncStorage.setItem('user_email', email);
+
+      console.log('📋 Sending OTP with business data ready:', {
+        businessName,
+        address,
+        pincode,
+        categories: categories?.length,
+        email,
+        phone
+      });
 
       // Send OTP request
       const response = await login(phone);
@@ -320,13 +350,33 @@ export default function BusinessUploadScreen() {
         // Store the user ID from the response
         if (response.data && response.data.user && response.data.user.id) {
           const id = response.data.user.id;
+
+          // Set the new userId for this session
           setUserId(id);
-          // Also store in AsyncStorage for persistence
           await AsyncStorage.setItem('user_id', id);
-          console.log('User ID stored:', id);
+
+          console.log('✅ User ID stored for current session:', id);
 
           // Wait a moment to ensure the user ID is properly saved
           await new Promise(resolve => setTimeout(resolve, 1000));
+
+          // Final validation check before document upload
+          console.log('🔍 Final validation before document upload...');
+          const finalMissingFields = [];
+          if (!businessName) finalMissingFields.push('Business Name');
+          if (!address) finalMissingFields.push('Shop Address');
+          if (!pincode) finalMissingFields.push('Pincode');
+          if (!categories?.length) finalMissingFields.push('Business Categories');
+          if (!email) finalMissingFields.push('Email');
+
+          if (finalMissingFields.length > 0) {
+            console.error('❌ Critical: Missing business data before upload:', finalMissingFields);
+            toast.error(`Critical error: Missing ${finalMissingFields.join(', ')}. Please restart the registration process.`);
+            setCurrentSection(0);
+            return;
+          }
+
+          console.log('✅ All business data validated, proceeding with uploads...');
 
           // Upload documents one by one with delays between them
           toast.info('Starting document upload process...');
@@ -364,12 +414,30 @@ export default function BusinessUploadScreen() {
 
             toast.success('Documents uploaded successfully');
 
+            console.log('📋 About to call registerBusinessOwner...');
+            console.log('📋 Current state values:', {
+              userId,
+              email,
+              phone,
+              businessName,
+              businessType,
+              address,
+              pincode,
+              categories,
+              gstin,
+              hasGstin
+            });
+
             // Then register business owner with document references
-            await registerBusinessOwner();
+            const registrationResult = await registerBusinessOwner();
+            console.log('📋 Registration result:', registrationResult);
           } catch (error) {
             console.error('Document upload error:', error);
             toast.error('Some documents failed to upload. You can still continue with registration.');
-            await registerBusinessOwner();
+
+            console.log('📋 About to call registerBusinessOwner (from catch block)...');
+            const registrationResult = await registerBusinessOwner();
+            console.log('📋 Registration result (from catch):', registrationResult);
           }
         } else {
           console.error('User ID not found in response:', response);
@@ -416,9 +484,70 @@ export default function BusinessUploadScreen() {
   };
 
   const registerBusinessOwner = async () => {
+    console.log('🚀 registerBusinessOwner function called!');
+    console.log('🚀 Current userId:', userId);
+    console.log('🚀 Business form data check:', {
+      businessName: businessName || 'EMPTY',
+      address: address || 'EMPTY',
+      pincode: pincode || 'EMPTY',
+      categories: categories?.length || 0,
+      email: email || 'EMPTY',
+      phone: phone || 'EMPTY'
+    });
+
+    // Get userId from state or AsyncStorage
+    let currentUserId = userId;
+    if (!currentUserId) {
+      console.log('🔍 userId not in state, checking AsyncStorage...');
+      try {
+        currentUserId = await AsyncStorage.getItem('user_id');
+        if (currentUserId) {
+          console.log('✅ Found userId in AsyncStorage:', currentUserId);
+          setUserId(currentUserId); // Update state
+        }
+      } catch (error) {
+        console.error('Error reading userId from AsyncStorage:', error);
+      }
+    }
+
+    // Verify this userId matches the current session
+    console.log('🔍 Verifying userId for current session...');
+    console.log('📋 Current phone number:', phone);
+    console.log('📋 Using userId:', currentUserId);
+
     // Only proceed if we have a user ID
-    if (!userId) {
+    if (!currentUserId) {
+      console.error('❌ Missing user ID in registerBusinessOwner');
       toast.error('Missing user ID. Please try again.');
+      return false;
+    }
+
+    console.log('✅ Using userId for registration:', currentUserId);
+
+    // Check if required business data is present
+    const missingBusinessFields = [];
+    if (!businessName) missingBusinessFields.push('Business Name');
+    if (!address) missingBusinessFields.push('Shop Address');
+    if (!pincode) missingBusinessFields.push('Pincode');
+    if (!categories?.length) missingBusinessFields.push('Business Categories');
+    if (!email) missingBusinessFields.push('Email');
+    if (!phone) missingBusinessFields.push('Phone Number');
+
+    if (missingBusinessFields.length > 0) {
+      console.error('❌ Missing required business data:', {
+        businessName: businessName || 'MISSING',
+        address: address || 'MISSING',
+        pincode: pincode || 'MISSING',
+        categories: categories?.length || 0,
+        email: email || 'MISSING',
+        phone: phone || 'MISSING'
+      });
+
+      const errorMessage = `Missing required information: ${missingBusinessFields.join(', ')}. Please go back and fill in all business details.`;
+      toast.error(errorMessage);
+
+      // Navigate back to the first section to fill in missing data
+      setCurrentSection(0);
       return false;
     }
 
@@ -427,143 +556,80 @@ export default function BusinessUploadScreen() {
       toast.info('Finalizing registration...');
 
       // Register business owner
-      const registrationData = {
-        userId, // Include the user ID
+      const registrationData: any = {
+        userId: currentUserId, // Use the retrieved user ID
         email,
         phoneNumber: phone,
         businessName,
-        businessType,
-        gstin,
+        businessType: businessType || 'retail', // Default business type
         categories,
         businessAddress: address,
         pincode,
       };
 
+      // Only include GSTIN if provided
+      if (hasGstin && gstin) {
+        registrationData.gstin = gstin;
+      }
+
+      console.log('📤 Sending registration data:', registrationData);
+      console.log('📋 Individual field values:', {
+        currentUserId,
+        email,
+        phone,
+        businessName,
+        businessType,
+        address,
+        pincode,
+        categories,
+        gstin,
+        hasGstin
+      });
+
       const response = await businessOwnerService.registerBusinessOwner(registrationData);
+
+      console.log('Registration response:', response);
 
       // TypeScript fix: check if response is an object with success property
       if (response && typeof response === 'object' && 'success' in response && response.success) {
         toast.success('Registration completed successfully!');
 
+        // Store registration success
+        await AsyncStorage.setItem('registration_completed', 'true');
+        await AsyncStorage.setItem('user_role', 'business-owner');
+
         // Navigate to thank you screen
         navigation.navigate('ThankYou');
         return true;
       } else {
-        toast.error('Registration failed. Please try again.');
+        const errorMessage = response && typeof response === 'object' && 'message' in response
+          ? String(response.message)
+          : 'Registration failed. Please try again.';
+        toast.error(errorMessage);
         return false;
       }
     } catch (error: any) {
       console.error('Registration error:', error);
-      Alert.alert(
-        'Registration Error',
-        error.response?.data?.message || 'Failed to register. Please try again.'
-      );
+      console.error('Error response:', error.response?.data);
+
+      let errorMessage = 'Failed to register. Please try again.';
+
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
+        errorMessage = error.response.data.errors.map((err: any) => err.msg).join(', ');
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      Alert.alert('Registration Error', errorMessage);
       return false;
     } finally {
       setLoading(false);
     }
   };
 
-  const uploadDocuments = async () => {
-    try {
-      setLoading(true);
-      toast.info('Uploading documents, please wait...');
 
-      // Track upload progress
-      let uploadedCount = 0;
-      let failedUploads = [];
-      const totalDocuments = [aadharUri, panUri, selfieUri, videoUri, shopImageUri, shopVideoUri].filter(Boolean).length;
-
-      // Upload Aadhar
-      if (aadharUri) {
-        try {
-          await uploadFile(aadharUri, 'aadhar');
-          uploadedCount++;
-          toast.info(`Uploading documents (${uploadedCount}/${totalDocuments})...`);
-        } catch (error) {
-          console.error('Failed to upload Aadhar:', error);
-          failedUploads.push('Aadhar Card');
-        }
-      }
-
-      // Upload PAN
-      if (panUri) {
-        try {
-          await uploadFile(panUri, 'pan');
-          uploadedCount++;
-          toast.info(`Uploading documents (${uploadedCount}/${totalDocuments})...`);
-        } catch (error) {
-          console.error('Failed to upload PAN:', error);
-          failedUploads.push('PAN Card');
-        }
-      }
-
-      // Upload selfie
-      if (selfieUri) {
-        try {
-          await uploadFile(selfieUri, 'selfie');
-          uploadedCount++;
-          toast.info(`Uploading documents (${uploadedCount}/${totalDocuments})...`);
-        } catch (error) {
-          console.error('Failed to upload Selfie:', error);
-          failedUploads.push('Selfie');
-        }
-      }
-
-      // Upload verification video
-      if (videoUri) {
-        try {
-          await uploadFile(videoUri, 'video');
-          uploadedCount++;
-          toast.info(`Uploading documents (${uploadedCount}/${totalDocuments})...`);
-        } catch (error) {
-          console.error('Failed to upload Video:', error);
-          failedUploads.push('Verification Video');
-        }
-      }
-
-      // Upload business images
-      if (shopImageUri) {
-        try {
-          await uploadFile(shopImageUri, 'business-image');
-          uploadedCount++;
-          toast.info(`Uploading documents (${uploadedCount}/${totalDocuments})...`);
-        } catch (error) {
-          console.error('Failed to upload Shop Image:', error);
-          failedUploads.push('Shop Image');
-        }
-      }
-
-      // Upload business video
-      if (shopVideoUri) {
-        try {
-          await uploadFile(shopVideoUri, 'business-video');
-          uploadedCount++;
-          toast.info(`Uploading documents (${uploadedCount}/${totalDocuments})...`);
-        } catch (error) {
-          console.error('Failed to upload Shop Video:', error);
-          failedUploads.push('Shop Video');
-        }
-      }
-
-      // Check if any uploads failed
-      if (failedUploads.length > 0) {
-        toast.error(`Failed to upload: ${failedUploads.join(', ')}. You can continue with registration.`);
-        // Return true anyway to allow registration to continue
-        return true;
-      }
-
-      toast.success('All documents uploaded successfully!');
-      return true;
-    } catch (error) {
-      console.error('Document upload error:', error);
-      toast.error('Failed to upload some documents. You can still continue with registration.');
-      // Return true to allow registration to continue even if document uploads fail
-      return true;
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const uploadFile = async (uri: string, type: string) => {
     try {
@@ -579,7 +645,6 @@ export default function BusinessUploadScreen() {
         : (type.includes('video') ? 'mp4' : 'jpeg');
 
       const isVideo = type === 'business-video' || type === 'video';
-      const mimePrefix = isVideo ? 'video' : 'image';
       const mimeType = isVideo
         ? (fileType === 'mov' ? 'video/quicktime' : 'video/mp4')
         : (fileType === 'png' ? 'image/png' : 'image/jpeg');
@@ -920,114 +985,116 @@ export default function BusinessUploadScreen() {
           Upload your personal identification documents *
         </Text>
 
-        <View style={styles.documentCard}>
-          <View style={styles.documentHeader}>
-            <MaterialCommunityIcons name="card-account-details" size={24} color="#4361EE" />
-            <Text style={styles.documentTitle}>Aadhar Card *</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+          <View style={styles.documentCard}>
+            <View style={styles.documentHeader}>
+              <MaterialCommunityIcons name="card-account-details" size={24} color="#4361EE" />
+              <Text style={styles.documentTitle}>Aadhar Card *</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.documentUpload, aadharUri && styles.documentUploaded]}
+              onPress={() => pickImage(setAadharUri)}
+            >
+              {aadharUri ? (
+                <>
+                  <Image source={{ uri: aadharUri }} style={styles.documentPreview} />
+                  <View style={styles.documentOverlay}>
+                    <MaterialIcons name="check-circle" size={32} color="#4CC9F0" />
+                    <Text style={styles.documentUploadedText}>Uploaded</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="cloud-upload" size={40} color="#4361EE" />
+                  <Text style={styles.documentUploadText}>Tap to upload</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={[styles.documentUpload, aadharUri && styles.documentUploaded]}
-            onPress={() => pickImage(setAadharUri)}
-          >
-            {aadharUri ? (
-              <>
-                <Image source={{ uri: aadharUri }} style={styles.documentPreview} />
-                <View style={styles.documentOverlay}>
-                  <MaterialIcons name="check-circle" size={32} color="#4CC9F0" />
-                  <Text style={styles.documentUploadedText}>Uploaded</Text>
-                </View>
-              </>
-            ) : (
-              <>
-                <MaterialCommunityIcons name="cloud-upload" size={40} color="#4361EE" />
-                <Text style={styles.documentUploadText}>Tap to upload</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
 
-        <View style={styles.documentCard}>
-          <View style={styles.documentHeader}>
-            <MaterialCommunityIcons name="card-bulleted" size={24} color="#4361EE" />
-            <Text style={styles.documentTitle}>PAN Card *</Text>
+          <View style={styles.documentCard}>
+            <View style={styles.documentHeader}>
+              <MaterialCommunityIcons name="card-bulleted" size={24} color="#4361EE" />
+              <Text style={styles.documentTitle}>PAN Card *</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.documentUpload, panUri && styles.documentUploaded]}
+              onPress={() => pickImage(setPanUri)}
+            >
+              {panUri ? (
+                <>
+                  <Image source={{ uri: panUri }} style={styles.documentPreview} />
+                  <View style={styles.documentOverlay}>
+                    <MaterialIcons name="check-circle" size={32} color="#4CC9F0" />
+                    <Text style={styles.documentUploadedText}>Uploaded</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="cloud-upload" size={40} color="#4361EE" />
+                  <Text style={styles.documentUploadText}>Tap to upload</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={[styles.documentUpload, panUri && styles.documentUploaded]}
-            onPress={() => pickImage(setPanUri)}
-          >
-            {panUri ? (
-              <>
-                <Image source={{ uri: panUri }} style={styles.documentPreview} />
-                <View style={styles.documentOverlay}>
-                  <MaterialIcons name="check-circle" size={32} color="#4CC9F0" />
-                  <Text style={styles.documentUploadedText}>Uploaded</Text>
-                </View>
-              </>
-            ) : (
-              <>
-                <MaterialCommunityIcons name="cloud-upload" size={40} color="#4361EE" />
-                <Text style={styles.documentUploadText}>Tap to upload</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
 
-        <View style={styles.documentCard}>
-          <View style={styles.documentHeader}>
-            <MaterialCommunityIcons name="face-recognition" size={24} color="#4361EE" />
-            <Text style={styles.documentTitle}>Live Selfie *</Text>
+          <View style={styles.documentCard}>
+            <View style={styles.documentHeader}>
+              <MaterialCommunityIcons name="face-recognition" size={24} color="#4361EE" />
+              <Text style={styles.documentTitle}>Live Selfie *</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.documentUpload, selfieUri && styles.documentUploaded]}
+              onPress={() => takeSelfie()}
+            >
+              {selfieUri ? (
+                <>
+                  <Image source={{ uri: selfieUri }} style={styles.documentPreview} />
+                  <View style={styles.documentOverlay}>
+                    <MaterialIcons name="check-circle" size={32} color="#4CC9F0" />
+                    <Text style={styles.documentUploadedText}>Uploaded</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="camera" size={40} color="#4361EE" />
+                  <Text style={styles.documentUploadText}>Take Live Selfie</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={[styles.documentUpload, selfieUri && styles.documentUploaded]}
-            onPress={() => takeSelfie()}
-          >
-            {selfieUri ? (
-              <>
-                <Image source={{ uri: selfieUri }} style={styles.documentPreview} />
-                <View style={styles.documentOverlay}>
-                  <MaterialIcons name="check-circle" size={32} color="#4CC9F0" />
-                  <Text style={styles.documentUploadedText}>Uploaded</Text>
-                </View>
-              </>
-            ) : (
-              <>
-                <MaterialCommunityIcons name="camera" size={40} color="#4361EE" />
-                <Text style={styles.documentUploadText}>Take Live Selfie</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
 
-        <View style={styles.documentCard}>
-          <View style={styles.documentHeader}>
-            <MaterialCommunityIcons name="video" size={24} color="#4361EE" />
-            <Text style={styles.documentTitle}>Verification Video *</Text>
+          <View style={styles.documentCard}>
+            <View style={styles.documentHeader}>
+              <MaterialCommunityIcons name="video" size={24} color="#4361EE" />
+              <Text style={styles.documentTitle}>Verification Video *</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.documentUpload, videoUri && styles.documentUploaded]}
+              onPress={() => recordVideo(setVideoUri)}
+            >
+              {videoUri ? (
+                <>
+                  <Video
+                    source={{ uri: videoUri }}
+                    style={styles.documentPreview}
+                    useNativeControls
+                    resizeMode={ResizeMode.COVER}
+                  />
+                  <View style={styles.documentOverlay}>
+                    <MaterialIcons name="check-circle" size={32} color="#4CC9F0" />
+                    <Text style={styles.documentUploadedText}>Uploaded</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="video-plus" size={40} color="#4361EE" />
+                  <Text style={styles.documentUploadText}>Record Live Video</Text>
+                  <Text style={styles.videoDurationNote}>(Max 1 minute)</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={[styles.documentUpload, videoUri && styles.documentUploaded]}
-            onPress={() => recordVideo(setVideoUri)}
-          >
-            {videoUri ? (
-              <>
-                <Video
-                  source={{ uri: videoUri }}
-                  style={styles.documentPreview}
-                  useNativeControls
-                  resizeMode={ResizeMode.COVER}
-                />
-                <View style={styles.documentOverlay}>
-                  <MaterialIcons name="check-circle" size={32} color="#4CC9F0" />
-                  <Text style={styles.documentUploadedText}>Uploaded</Text>
-                </View>
-              </>
-            ) : (
-              <>
-                <MaterialCommunityIcons name="video-plus" size={40} color="#4361EE" />
-                <Text style={styles.documentUploadText}>Record Live Video</Text>
-                <Text style={styles.videoDurationNote}>(Max 1 minute)</Text>
-              </>
-            )}
-          </TouchableOpacity>
         </View>
 
         <Text style={styles.requiredFieldsNote}>* All documents are required</Text>
@@ -1047,61 +1114,63 @@ export default function BusinessUploadScreen() {
           Upload your shop images and videos *
         </Text>
 
-        <View style={styles.documentCard}>
-          <View style={styles.documentHeader}>
-            <MaterialCommunityIcons name="storefront" size={24} color="#4361EE" />
-            <Text style={styles.documentTitle}>Shop Image *</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+          <View style={styles.documentCard}>
+            <View style={styles.documentHeader}>
+              <MaterialCommunityIcons name="storefront" size={24} color="#4361EE" />
+              <Text style={styles.documentTitle}>Shop Image *</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.documentUpload, shopImageUri && styles.documentUploaded]}
+              onPress={() => pickImage(setShopImageUri)}
+            >
+              {shopImageUri ? (
+                <>
+                  <Image source={{ uri: shopImageUri }} style={styles.documentPreview} />
+                  <View style={styles.documentOverlay}>
+                    <MaterialIcons name="check-circle" size={32} color="#4CC9F0" />
+                    <Text style={styles.documentUploadedText}>Uploaded</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="store-plus" size={40} color="#4361EE" />
+                  <Text style={styles.documentUploadText}>Tap to upload</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={[styles.documentUpload, shopImageUri && styles.documentUploaded]}
-            onPress={() => pickImage(setShopImageUri)}
-          >
-            {shopImageUri ? (
-              <>
-                <Image source={{ uri: shopImageUri }} style={styles.documentPreview} />
-                <View style={styles.documentOverlay}>
-                  <MaterialIcons name="check-circle" size={32} color="#4CC9F0" />
-                  <Text style={styles.documentUploadedText}>Uploaded</Text>
-                </View>
-              </>
-            ) : (
-              <>
-                <MaterialCommunityIcons name="store-plus" size={40} color="#4361EE" />
-                <Text style={styles.documentUploadText}>Tap to upload</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
 
-        <View style={styles.documentCard}>
-          <View style={styles.documentHeader}>
-            <MaterialCommunityIcons name="video-box" size={24} color="#4361EE" />
-            <Text style={styles.documentTitle}>Shop Video *</Text>
+          <View style={styles.documentCard}>
+            <View style={styles.documentHeader}>
+              <MaterialCommunityIcons name="video-box" size={24} color="#4361EE" />
+              <Text style={styles.documentTitle}>Shop Video *</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.documentUpload, shopVideoUri && styles.documentUploaded]}
+              onPress={() => pickVideo(setShopVideoUri)}
+            >
+              {shopVideoUri ? (
+                <>
+                  <Video
+                    source={{ uri: shopVideoUri }}
+                    style={styles.documentPreview}
+                    useNativeControls
+                    resizeMode={ResizeMode.COVER}
+                  />
+                  <View style={styles.documentOverlay}>
+                    <MaterialIcons name="check-circle" size={32} color="#4CC9F0" />
+                    <Text style={styles.documentUploadedText}>Uploaded</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="video-plus" size={40} color="#4361EE" />
+                  <Text style={styles.documentUploadText}>Tap to upload</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={[styles.documentUpload, shopVideoUri && styles.documentUploaded]}
-            onPress={() => pickVideo(setShopVideoUri)}
-          >
-            {shopVideoUri ? (
-              <>
-                <Video
-                  source={{ uri: shopVideoUri }}
-                  style={styles.documentPreview}
-                  useNativeControls
-                  resizeMode={ResizeMode.COVER}
-                />
-                <View style={styles.documentOverlay}>
-                  <MaterialIcons name="check-circle" size={32} color="#4CC9F0" />
-                  <Text style={styles.documentUploadedText}>Uploaded</Text>
-                </View>
-              </>
-            ) : (
-              <>
-                <MaterialCommunityIcons name="video-plus" size={40} color="#4361EE" />
-                <Text style={styles.documentUploadText}>Tap to upload</Text>
-              </>
-            )}
-          </TouchableOpacity>
         </View>
 
         <Text style={styles.requiredFieldsNote}>* All documents are required</Text>
@@ -1177,8 +1246,20 @@ export default function BusinessUploadScreen() {
     const validateCurrentSection = () => {
       const missingFields = [];
 
+      console.log(`🔍 Validating section ${currentSection}...`);
+
       switch (currentSection) {
         case 0: // Basic Information
+          console.log('📋 Section 0 validation - Current values:', {
+            phone: phone || 'EMPTY',
+            email: email || 'EMPTY',
+            businessName: businessName || 'EMPTY',
+            address: address || 'EMPTY',
+            pincode: pincode || 'EMPTY',
+            hasGstin,
+            gstin: gstin || 'EMPTY'
+          });
+
           if (!phone || phone.length !== 10) missingFields.push('Valid Phone Number');
           if (!email || !email.includes('@')) missingFields.push('Valid Email');
           if (!businessName) missingFields.push('Business Name');
@@ -1187,6 +1268,7 @@ export default function BusinessUploadScreen() {
           if (!pincode) missingFields.push('Pincode');
           break;
         case 1: // Categories
+          console.log('📋 Section 1 validation - Categories:', categories);
           if (categories.length === 0) missingFields.push('At least one Business Category');
           break;
         case 2: // Personal Documents
@@ -1202,10 +1284,12 @@ export default function BusinessUploadScreen() {
       }
 
       if (missingFields.length > 0) {
+        console.log(`❌ Validation failed for section ${currentSection}:`, missingFields);
         toast.error(`Please provide: ${missingFields.join(', ')}`);
         return false;
       }
 
+      console.log(`✅ Validation passed for section ${currentSection}`);
       return true;
     };
 
@@ -1487,6 +1571,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   documentCard: {
+    // flexDirection: 'column',
+    // display: 'flex',
+    // flexWrap: 'wrap',
+    width: '48%',
+
+
     backgroundColor: '#F8F8F8',
     borderRadius: 12,
     padding: 15,
