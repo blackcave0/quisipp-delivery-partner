@@ -17,7 +17,7 @@ import api from "./api";
 export const registerBusinessOwner = async (businessData) => {
   try {
     console.log("Registering business owner with data:", businessData);
-    const response = await api.post("/business-owners", businessData);
+    const response = await api.post("/business-owners/register", businessData);
     return response.data;
   } catch (error) {
     console.error(
@@ -69,7 +69,7 @@ export const updateProfile = async (profileData) => {
 export const updateBusinessDetails = async (businessDetails) => {
   try {
     const response = await api.put(
-      "/business-owners/business-details",
+      "/business-owners/business",
       businessDetails
     );
     return response.data;
