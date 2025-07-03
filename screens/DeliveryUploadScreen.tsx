@@ -35,6 +35,7 @@ type RootStackParamList = {
   ThankYou: undefined;
   DeliveryUpload: { type: 'part-time' | 'full-time' };
   HomeScreen: undefined;
+  RoleSelect: undefined;
   // add other routes if needed
 };
 
@@ -51,6 +52,8 @@ export default function DeliveryUploadScreen() {
   const { login, verifyOTP, user } = useAuth();
   const [loading, setLoading] = useState(false);
 
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [aadharUri, setAadharUri] = useState<string | null>(null);
@@ -82,10 +85,14 @@ export default function DeliveryUploadScreen() {
         const storedEmail = await AsyncStorage.getItem('user_email');
         const storedPhone = await AsyncStorage.getItem('user_phone');
         const storedVehicle = await AsyncStorage.getItem('selected_vehicle');
+        const storedFirstName = await AsyncStorage.getItem('user_first_name');
+        const storedLastName = await AsyncStorage.getItem('user_last_name');
 
         if (storedEmail) setEmail(storedEmail);
         if (storedPhone) setPhone(storedPhone);
         if (storedVehicle) setVehicleType(storedVehicle);
+        if (storedFirstName) setFirstName(storedFirstName);
+        if (storedLastName) setLastName(storedLastName);
 
         // Don't load stored user ID - we'll get it from the current session
         // Clear any old user ID to avoid conflicts
@@ -181,10 +188,9 @@ export default function DeliveryUploadScreen() {
       }
 
       const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
+        allowsEditing: false,
         quality: 1,
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        aspect: [1, 1],
         presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN
       });
 
@@ -264,6 +270,8 @@ export default function DeliveryUploadScreen() {
       // Store phone and email for later use
       await AsyncStorage.setItem('user_phone', phone);
       if (email) await AsyncStorage.setItem('user_email', email);
+      if (firstName) await AsyncStorage.setItem('user_first_name', firstName);
+      if (lastName) await AsyncStorage.setItem('user_last_name', lastName);
 
       // Try real OTP service first
       try {
@@ -447,13 +455,13 @@ export default function DeliveryUploadScreen() {
         const uploadSuccess = await uploadDocuments();
 
         if (uploadSuccess) {
-          // Navigate to profile screen (HomeScreen) instead of thank you
+          // Navigate to thank you screen instead of home screen
           try {
-            navigation.navigate('HomeScreen');
+            navigation.navigate('ThankYou');
           } catch (navError) {
             console.error('Navigation error:', navError);
-            // If navigation fails, try to go back to home
-            navigation.navigate('HomeScreen');
+            // If navigation fails, try to go back to role select
+            navigation.navigate('RoleSelect');
           }
         } else {
           toast.error('Failed to upload documents. Please try again.');
@@ -466,6 +474,8 @@ export default function DeliveryUploadScreen() {
       console.log('Updating existing user with delivery partner details...');
 
       const updateData = {
+        firstName,
+        lastName,
         email,
         phoneNumber: phone,
         vehicleType: vehicleType || 'motorcycle',
@@ -489,13 +499,13 @@ export default function DeliveryUploadScreen() {
         const uploadSuccess = await uploadDocuments();
 
         if (uploadSuccess) {
-          // Navigate to profile screen (HomeScreen) instead of thank you
+          // Navigate to thank you screen instead of home screen
           try {
-            navigation.navigate('HomeScreen');
+            navigation.navigate('ThankYou');
           } catch (navError) {
             console.error('Navigation error:', navError);
-            // If navigation fails, try to go back to home
-            navigation.navigate('HomeScreen');
+            // If navigation fails, try to go back to role select
+            navigation.navigate('RoleSelect');
           }
         } else {
           toast.error('Registration successful but document upload failed. Please try again.');
@@ -512,10 +522,10 @@ export default function DeliveryUploadScreen() {
         const uploadSuccess = await uploadDocuments();
         if (uploadSuccess) {
           try {
-            navigation.navigate('HomeScreen');
+            navigation.navigate('ThankYou');
           } catch (navError) {
             console.error('Navigation error:', navError);
-            navigation.navigate('HomeScreen');
+            navigation.navigate('RoleSelect');
           }
           return;
         } else {
@@ -632,6 +642,8 @@ export default function DeliveryUploadScreen() {
     const missingFields = [];
 
     // Basic information validation
+    if (!firstName) missingFields.push('First Name');
+    if (!lastName) missingFields.push('Last Name');
     if (!phone || phone.length !== 10) missingFields.push('Valid Phone Number (10 digits)');
     if (!email || !isValidEmail(email)) missingFields.push('Valid Email Address (e.g., user@example.com)');
 
@@ -659,6 +671,14 @@ export default function DeliveryUploadScreen() {
   const nextStep = () => {
     if (currentStep === 1) {
       // Validate personal info
+      if (!firstName) {
+        toast.error('Please enter your first name');
+        return;
+      }
+      if (!lastName) {
+        toast.error('Please enter your last name');
+        return;
+      }
       if (!phone || phone.length !== 10) {
         toast.error('Please enter a valid 10-digit phone number');
         return;
@@ -749,6 +769,32 @@ export default function DeliveryUploadScreen() {
               </View>
 
               <Text style={styles.subtitle}>You selected: <Text style={styles.highlightText}>{type === 'part-time' ? 'Part-Time' : 'Full-Time'}</Text></Text>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>First Name *</Text>
+                <View style={styles.inputContainer}>
+                  <Ionicons name="person-outline" size={20} color="#666" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter your first name"
+                    value={firstName}
+                    onChangeText={setFirstName}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Last Name *</Text>
+                <View style={styles.inputContainer}>
+                  <Ionicons name="person-outline" size={20} color="#666" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter your last name"
+                    value={lastName}
+                    onChangeText={setLastName}
+                  />
+                </View>
+              </View>
 
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Phone Number *</Text>
