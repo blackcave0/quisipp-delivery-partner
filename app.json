@@ -69,12 +69,16 @@
           "color": "#ffffff",
           "defaultChannel": "default"
         }
-      ]
+      ],
+      "react-native-video"
     ],
-   
     "runtimeVersion": {
       "policy": "appVersion"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "6820882e-a69d-437c-a0f4-b8cbdeaf8daa"
+      }
     }
-    
   }
 }
